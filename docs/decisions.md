@@ -131,7 +131,29 @@ Doze 中の通知は遅れることを受け入れる。
 | `FOREGROUND_SERVICE` / `FOREGROUND_SERVICE_DATA_SYNC` | 常設通知 | なし |
 | `RECEIVE_BOOT_COMPLETED` | 再起動後の復帰（任意） | なし |
 
-段階2までは `INTERNET` と `ACCESS_NETWORK_STATE` のみで、実行時ダイアログは出ない。
+実行時ダイアログが出るのは `POST_NOTIFICATIONS` だけ。
+
+**段階2 の実測（ビルド済み APK を `aapt2 dump badging` で確認）**:
+
+```
+INTERNET
+ACCESS_NETWORK_STATE
+WAKE_LOCK
+RECEIVE_BOOT_COMPLETED
+FOREGROUND_SERVICE
+com.limitchecker.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
+```
+
+後半4つは **WorkManager（androidx.work）がマニフェストのマージで自動追加**する。
+アプリ側のマニフェストには書いていない。いずれも通常権限で実行時ダイアログは出ないが、
+「段階2 は2つだけ」という当初の記述は誤りだったため訂正する。
+
+`FOREGROUND_SERVICE` と `RECEIVE_BOOT_COMPLETED` は段階3・4 の常設通知で必要になるため、
+結果的に前倒しで入った形になる。最小構成にこだわるなら WorkManager をやめて
+AlarmManager に替えれば2つに減らせるが、段階4 で足し直すことになる。
+
+権限を増やす依存を入れるときは、**ビルド後の APK で実測して確認する**。
+マニフェストを読むだけでは足りない。
 
 **取らない権限**: 位置情報、ストレージ、カメラ、連絡先、`QUERY_ALL_PACKAGES`、
 アクセシビリティ、`SYSTEM_ALERT_WINDOW`、電池最適化の除外。
