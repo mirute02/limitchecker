@@ -143,13 +143,16 @@ def maybe_post(report: dict, env: dict) -> None:
 
     sender = Path(__file__).resolve().parent / "send.py"
     try:
-        subprocess.Popen(
+        child = subprocess.Popen(
             [sys.executable, str(sender)],
             stdin=subprocess.PIPE,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             start_new_session=True,
-        ).stdin.write(json.dumps(report).encode())
+        )
+        # 明示的に閉じないと送信側が EOF を待って止まる。待ちはしない。
+        child.stdin.write(json.dumps(report).encode())
+        child.stdin.close()
     except Exception:
         # 送信できなくてもステータス行は出す。鮮度はウィジェット側が判断する。
         pass
