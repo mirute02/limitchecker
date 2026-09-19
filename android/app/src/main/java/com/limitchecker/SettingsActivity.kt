@@ -12,6 +12,8 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 
 /**
  * hub の接続先とトークンを入れる画面。
@@ -30,13 +32,24 @@ class SettingsActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        title = getString(R.string.settings_title)
+
+        // targetSdk 35 以降はウィンドウが画面全体に広がる（edge-to-edge）。
+        // アクションバーを使うと、その下にコンテンツが潜り込んで先頭が隠れる。
+        // タイトルは自前で描き、余白はインセットから明示的に入れる。
+        actionBar?.hide()
 
         val pad = dp(20)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(pad, pad, pad, pad)
         }
+
+        root.addView(TextView(this).apply {
+            text = getString(R.string.settings_title)
+            textSize = 22f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            setPadding(0, 0, 0, dp(8))
+        })
 
         // ---- 接続先 ----
         root.addView(label(getString(R.string.hub_url_label)))
@@ -75,7 +88,7 @@ class SettingsActivity : Activity() {
         }, wide())
 
         statusText = TextView(this).apply {
-            setPadding(0, dp(16), 0, 0)
+            setPadding(0, dp(12), 0, 0)
             text = getString(R.string.settings_help)
         }
         root.addView(statusText)
@@ -93,6 +106,10 @@ class SettingsActivity : Activity() {
             text = getString(R.string.hub_setup_steps)
             setPadding(0, dp(12), 0, 0)
             setTextIsSelectable(true)
+            // コマンドを含むので等幅にする。桁が揃わないと読みにくい。
+            typeface = android.graphics.Typeface.MONOSPACE
+            textSize = 11f
+            setLineSpacing(0f, 1.15f)
             visibility = android.view.View.GONE
         }
         root.addView(Button(this).apply {
@@ -108,13 +125,22 @@ class SettingsActivity : Activity() {
         }, wide())
         root.addView(instructions)
 
-        setContentView(ScrollView(this).apply {
+        val scroll = ScrollView(this).apply {
             addView(
                 root,
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
             )
-        })
+        }
+        // ステータスバー・ナビゲーションバー・キーボードのぶんだけ内側に寄せる
+        ViewCompat.setOnApplyWindowInsetsListener(scroll) { view, insets ->
+            val bars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime()
+            )
+            view.setPadding(0, bars.top, 0, bars.bottom)
+            insets
+        }
+        setContentView(scroll)
     }
 
     override fun onResume() {
@@ -197,7 +223,7 @@ class SettingsActivity : Activity() {
 
     private fun label(text: String) = TextView(this).apply {
         this.text = text
-        setPadding(0, dp(16), 0, dp(4))
+        setPadding(0, dp(12), 0, dp(2))
     }
 
     private fun note(text: String) = TextView(this).apply {

@@ -9,7 +9,7 @@
     <string name="token_label">トークン</string>
     <string name="token_hint_empty">.env の LIMITCHECKER_TOKEN の値</string>
     <string name="token_hint_saved">保存済み（変更する場合のみ入力）</string>
-    <string name="token_storage_note">トークンは Android Keystore の鍵で暗号化して保存します。鍵は端末内に留まり、アプリからも取り出せません。入力欄は伏せ字で、保存後に読み返して表示することはありません。</string>
+    <string name="token_storage_note">Android Keystore の鍵で暗号化して保存します。平文では保存しません。</string>
     <string name="token_keystore_unavailable">この端末では Keystore が使えないため、トークンを安全に保存できません。平文では保存しない方針のため、設定は保存されていません。</string>
     <string name="save_and_test">保存して接続を確認</string>
     <string name="settings_help">平文 HTTP で接続できるのは、この端末自身と *.ts.net のみです。それ以外は HTTPS が必要です。</string>
@@ -26,11 +26,12 @@
     <string name="hide_hub_steps">手順を隠す</string>
     <string name="hub_setup_steps">hub は残量を集約して返すサーバです。どこか1台で動いていれば足ります。全マシンで動かす必要はありません。
 
-■ 1. 置く場所を決める
+── 1. 置く場所を決める
 
-常時起動している Linux 機を勧めます。Mac でも動きます。Android でも動きますが、メモリ不足でバックグラウンドが止められるため常用には向きません。
+常時起動している Linux 機を勧めます。Mac でも動きます。
+Android でも動きますが、メモリ不足でバックグラウンドが止められるため常用には向きません。
 
-■ 2. 取得と設定
+── 2. 取得と設定
 
   git clone &lt;リポジトリ&gt; limitchecker
   cd limitchecker
@@ -42,15 +43,16 @@
 
 同じ値をこの画面のトークン欄にも入れます。
 
-■ 3. 待ち受け先
+── 3. 待ち受け先
 
 同じ端末だけで使うなら既定のままで構いません。
 
   LIMITCHECKER_BIND=127.0.0.1
 
-外出先から見るなら Tailscale のアドレスに変えます。0.0.0.0 は安全のため起動を拒否します。
+外出先から見るなら Tailscale のアドレスに変えます。
+0.0.0.0 は安全のため起動を拒否します。
 
-■ 4. 常駐させる
+── 4. 常駐させる
 
 Linux（一度設定すれば以後さわる必要はありません）:
 
@@ -62,29 +64,34 @@ Linux（一度設定すれば以後さわる必要はありません）:
 
 macOS:
 
-  sed "s|__HOME__|$HOME|g" deploy/com.limitchecker.hub.plist &gt; ~/Library/LaunchAgents/com.limitchecker.hub.plist
-  launchctl load ~/Library/LaunchAgents/com.limitchecker.hub.plist
+  sed "s|__HOME__|$HOME|g" \n    deploy/com.limitchecker.hub.plist \n    &gt; ~/Library/LaunchAgents/com.limitchecker.hub.plist
+  launchctl load \n    ~/Library/LaunchAgents/com.limitchecker.hub.plist
 
 試すだけなら直接起動でも構いません:
 
   python3 hub/server.py
 
-■ 5. 残量を送る側（作業マシンごと）
+── 5. 残量を送る側（作業マシンごと）
 
-常駐プロセスは不要です。Claude Code の settings.json に次を足すだけです。
+常駐プロセスは不要です。
+Claude Code の settings.json に次を足すだけです。
 
   "statusLine": {
     "type": "command",
     "command": "python3 /path/to/limitchecker/agent/statusline.py"
   }
 
-Claude Code を動かすと、ステータス行に残量が出て、同時に hub へ送られます。
+Claude Code を動かすとステータス行に残量が出て、同時に hub へ送られます。
 
-■ 6. この画面で確認
+── 6. この画面で確認
 
-URL とトークンを入れて「保存して接続を確認」を押します。成功すると上のプレビューにドーナツが出ます。
+URL とトークンを入れて「保存して接続を確認」を押します。
+成功すると上のプレビューにドーナツが出ます。
 
-■ 覚えておくこと
+── 覚えておくこと
 
-残量は Claude Code が動いているときにしか更新されません。しばらく使っていないと値が古くなり、10分を超えると薄く、1時間を超えるとグレーになって「更新できません」と出ます。故障ではなく仕様です。</string>
+残量は Claude Code が動いているときにしか更新されません。
+しばらく使っていないと値が古くなり、10分を超えると薄く、
+1時間を超えるとグレーになって「更新できません」と出ます。
+故障ではなく仕様です。</string>
 </resources>
