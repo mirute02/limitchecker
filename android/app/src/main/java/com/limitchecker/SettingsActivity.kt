@@ -1,6 +1,7 @@
 package com.limitchecker
 
 import android.app.Activity
+import android.content.res.Configuration
 import android.os.Bundle
 import android.text.InputType
 import android.util.TypedValue
@@ -16,7 +17,8 @@ import android.widget.TextView
  * hub の接続先とトークンを入れる画面。
  *
  * 依存を増やさないため、レイアウトはコードで組む。
- * トークンは入力時も伏せ字にし、保存後に読み返して表示はしない。
+ * トークンは伏せ字で入力し、保存後に読み返して表示しない。
+ * 保存先は [TokenStore]（Android Keystore で暗号化）。
  */
 class SettingsActivity : Activity() {
 
@@ -24,6 +26,7 @@ class SettingsActivity : Activity() {
     private lateinit var tokenField: EditText
     private lateinit var statusText: TextView
     private lateinit var preview: ImageView
+    private lateinit var instructions: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -35,49 +38,75 @@ class SettingsActivity : Activity() {
             setPadding(pad, pad, pad, pad)
         }
 
+        // ---- 接続先 ----
         root.addView(label(getString(R.string.hub_url_label)))
         urlField = EditText(this).apply {
-            inputType = InputType.TYPE_TEXT_VARIATION_URI
+            // TYPE_CLASS_TEXT と OR しないと入力クラスが TYPE_NULL になり、
+            // 文字を受け付けない欄になる。
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
             setSingleLine()
-            hint = "http://127.0.0.1:8787"
-            setText(Prefs.hubUrl(this@SettingsActivity))
+            hint = DEFAULT_URL
+            val saved = Prefs.hubUrl(this@SettingsActivity)
+            setText(saved.ifEmpty { DEFAULT_URL })
         }
-        root.addView(urlField)
+        root.addView(urlField, wide())
 
+        // ---- トークン ----
         root.addView(label(getString(R.string.token_label)))
         tokenField = EditText(this).apply {
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
             setSingleLine()
-            // 保存済みのトークンは読み返して表示しない。空欄なら変更なしとして扱う。
             hint = if (Prefs.token(this@SettingsActivity).isEmpty()) {
                 getString(R.string.token_hint_empty)
             } else {
                 getString(R.string.token_hint_saved)
             }
         }
-        root.addView(tokenField)
+        root.addView(tokenField, wide())
 
-        statusText = TextView(this).apply {
-            setPadding(0, dp(20), 0, 0)
-            text = getString(R.string.settings_help)
+        root.addView(note(getString(R.string.token_storage_note)))
+        if (!TokenStore.isUsable()) {
+            root.addView(note(getString(R.string.token_keystore_unavailable)))
         }
 
         root.addView(Button(this).apply {
             text = getString(R.string.save_and_test)
             setOnClickListener { saveAndTest() }
-        })
+        }, wide())
+
+        statusText = TextView(this).apply {
+            setPadding(0, dp(16), 0, 0)
+            text = getString(R.string.settings_help)
+        }
         root.addView(statusText)
 
-        // ウィジェットを置かなくても見た目を確認できるようにする
+        // ---- プレビュー ----
         root.addView(label(getString(R.string.preview_label)))
-        preview = ImageView(this).apply {
-            adjustViewBounds = true
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(140),
-            )
+        preview = ImageView(this).apply { adjustViewBounds = true }
+        root.addView(
+            preview,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(140)),
+        )
+
+        // ---- hub の手順 ----
+        instructions = TextView(this).apply {
+            text = getString(R.string.hub_setup_steps)
+            setPadding(0, dp(12), 0, 0)
+            setTextIsSelectable(true)
+            visibility = android.view.View.GONE
         }
-        root.addView(preview)
+        root.addView(Button(this).apply {
+            text = getString(R.string.show_hub_steps)
+            setOnClickListener {
+                val showing = instructions.visibility == android.view.View.VISIBLE
+                instructions.visibility =
+                    if (showing) android.view.View.GONE else android.view.View.VISIBLE
+                text = getString(
+                    if (showing) R.string.show_hub_steps else R.string.hide_hub_steps
+                )
+            }
+        }, wide())
+        root.addView(instructions)
 
         setContentView(ScrollView(this).apply {
             addView(
@@ -88,10 +117,22 @@ class SettingsActivity : Activity() {
         })
     }
 
+    override fun onResume() {
+        super.onResume()
+        // 画面を開くたびに通信はしない。保存済みかどうかだけを反映する。
+        renderPreview(
+            if (Prefs.isConfigured(this)) {
+                HubClient.Result.Failed(getString(R.string.preview_tap_test))
+            } else {
+                HubClient.Result.NotConfigured
+            }
+        )
+    }
+
     private fun saveAndTest() {
         val url = urlField.text.toString().trim()
         val typed = tokenField.text.toString().trim()
-        // 空欄なら既存のトークンを保つ
+        // 空欄なら保存済みのトークンを保つ
         val token = if (typed.isEmpty()) Prefs.token(this) else typed
 
         if (url.isEmpty() || token.isEmpty()) {
@@ -101,6 +142,14 @@ class SettingsActivity : Activity() {
 
         Prefs.save(this, url, token)
         tokenField.setText("")
+        tokenField.hint = getString(R.string.token_hint_saved)
+
+        if (Prefs.token(this).isEmpty()) {
+            // Keystore に保存できなかった。平文では置かない。
+            statusText.text = getString(R.string.token_keystore_unavailable)
+            return
+        }
+
         statusText.text = getString(R.string.testing)
 
         // ネットワークはメインスレッドで触れない
@@ -127,22 +176,9 @@ class SettingsActivity : Activity() {
         }.start()
     }
 
-    override fun onResume() {
-        super.onResume()
-        // 保存済みの設定で一度描いておく。取得はしない（画面を開くたびに通信しない）。
-        renderPreview(
-            if (Prefs.isConfigured(this)) {
-                HubClient.Result.Failed(getString(R.string.preview_tap_test))
-            } else {
-                HubClient.Result.NotConfigured
-            }
-        )
-    }
-
     private fun renderPreview(result: HubClient.Result) {
         val night = (resources.configuration.uiMode and
-            android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
-            android.content.res.Configuration.UI_MODE_NIGHT_YES
+            Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
         preview.setImageBitmap(
             DonutRenderer.render(
                 widthPx = dp(320),
@@ -154,12 +190,28 @@ class SettingsActivity : Activity() {
         )
     }
 
+    private fun wide() = LinearLayout.LayoutParams(
+        ViewGroup.LayoutParams.MATCH_PARENT,
+        ViewGroup.LayoutParams.WRAP_CONTENT,
+    )
+
     private fun label(text: String) = TextView(this).apply {
         this.text = text
         setPadding(0, dp(16), 0, dp(4))
     }
 
+    private fun note(text: String) = TextView(this).apply {
+        this.text = text
+        textSize = 12f
+        setPadding(0, dp(6), 0, 0)
+        alpha = 0.75f
+    }
+
     private fun dp(value: Int): Int = TypedValue.applyDimension(
         TypedValue.COMPLEX_UNIT_DIP, value.toFloat(), resources.displayMetrics,
     ).toInt()
+
+    companion object {
+        private const val DEFAULT_URL = "http://127.0.0.1:8787"
+    }
 }

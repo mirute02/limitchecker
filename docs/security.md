@@ -70,7 +70,13 @@ git 履歴の全コミットがそのまま公開される**ため、「公開�
 
 ## 4. Android 実装ルール
 
-- トークンは `DataStore` に保存し、ログに出さない
+- **トークンは Android Keystore の鍵で暗号化して保存する。** 平文で
+  `SharedPreferences` や `DataStore` に置かない。鍵は端末内に留まり、対応端末では
+  TEE / StrongBox に格納されるため、アプリ領域を吸い出されても復号できない。
+  Keystore が使えない端末では保存せず、その旨を画面に出す（平文にフォールバックしない）
+- 鍵に `setUserAuthenticationRequired` は付けない。画面ロック中もウィジェットが
+  残量を取りに行くため。ロック中に読めないと機能が成立しない
+- トークンは入力欄で伏せ字にし、保存後に読み返して表示しない。ログにも例外にも出さない
 - `android:allowBackup="false"` と `dataExtractionRules` で端末バックアップ対象から除外する
 - 全コンポーネントを `android:exported="false"`（ウィジェットのレシーバ等、必要なものを除く）
 - 平文 HTTP は Tailscale 内に限るため `network_security_config` で接続先ホストを限定する
