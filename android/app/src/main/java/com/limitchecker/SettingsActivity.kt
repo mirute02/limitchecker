@@ -1,29 +1,35 @@
 package com.limitchecker
 
 import android.app.Activity
+import android.appwidget.AppWidgetManager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Color
+import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
 import android.text.InputType
+import android.text.method.PasswordTransformationMethod
 import android.util.TypedValue
+import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
-import android.widget.Toast
 import android.widget.TextView
+import android.widget.Toast
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 
 /**
- * hub の接続先とトークンを入れる画面。
+ * hub の接続先とトークンを入れる画面。ウィジェット配置時の設定画面も兼ねる。
  *
  * 依存を増やさないため、レイアウトはコードで組む。
  * トークンは伏せ字で入力し、保存後に読み返して表示しない。
@@ -31,19 +37,44 @@ import androidx.core.view.WindowInsetsCompat
  */
 class SettingsActivity : Activity() {
 
+    private enum class Os { LINUX, MAC }
+
     private lateinit var urlField: EditText
     private lateinit var tokenField: EditText
     private lateinit var statusText: TextView
     private lateinit var preview: ImageView
     private lateinit var instructions: LinearLayout
+    private lateinit var linuxButton: Button
+    private lateinit var macButton: Button
+
+    private var osMode = Os.LINUX
+
+    /** ウィジェット配置から呼ばれた場合の ID。通常起動では INVALID。 */
+    private var appWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
+
+    private val isConfigureFlow: Boolean
+        get() = appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         // targetSdk 35 以降はウィンドウが画面全体に広がる（edge-to-edge）。
-        // アクションバーを使うと、その下にコンテンツが潜り込んで先頭が隠れる。
-        // タイトルは自前で描き、余白はインセットから明示的に入れる。
+        // アクションバーを使うとその下にコンテンツが潜り込むため、自前で描く。
         actionBar?.hide()
+
+        appWidgetId = intent?.extras?.getInt(
+            AppWidgetManager.EXTRA_APPWIDGET_ID,
+            AppWidgetManager.INVALID_APPWIDGET_ID,
+        ) ?: AppWidgetManager.INVALID_APPWIDGET_ID
+
+        // 設定画面が RESULT_OK を返さないと、Android はウィジェットの配置を取り消す。
+        // 先に CANCELED を入れておき、保存できた時点で OK に差し替える。
+        if (isConfigureFlow) {
+            setResult(
+                RESULT_CANCELED,
+                Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId),
+            )
+        }
 
         val pad = dp(20)
         val root = LinearLayout(this).apply {
@@ -54,28 +85,30 @@ class SettingsActivity : Activity() {
         root.addView(TextView(this).apply {
             text = getString(R.string.settings_title)
             textSize = 22f
-            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            typeface = Typeface.DEFAULT_BOLD
             setPadding(0, 0, 0, dp(8))
         })
 
         // ---- 接続先 ----
         root.addView(label(getString(R.string.hub_url_label)))
         urlField = EditText(this).apply {
+            setSingleLine()
             // TYPE_CLASS_TEXT と OR しないと入力クラスが TYPE_NULL になり、
             // 文字を受け付けない欄になる。
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
-            setSingleLine()
             hint = DEFAULT_URL
-            val saved = Prefs.hubUrl(this@SettingsActivity)
-            setText(saved.ifEmpty { DEFAULT_URL })
+            setText(Prefs.hubUrl(this@SettingsActivity).ifEmpty { DEFAULT_URL })
         }
         root.addView(urlField, wide())
 
         // ---- トークン ----
         root.addView(label(getString(R.string.token_label)))
         tokenField = EditText(this).apply {
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
             setSingleLine()
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            // setSingleLine と inputType の設定順で変換方法が外れることがあるため、
+            // 伏せ字を明示する。貼り付けた内容も必ず伏せ字になる。
+            transformationMethod = PasswordTransformationMethod.getInstance()
             hint = if (Prefs.token(this@SettingsActivity).isEmpty()) {
                 getString(R.string.token_hint_empty)
             } else {
@@ -83,7 +116,6 @@ class SettingsActivity : Activity() {
             }
         }
         root.addView(tokenField, wide())
-
         root.addView(note(getString(R.string.token_storage_note)))
         if (!TokenStore.isUsable()) {
             root.addView(note(getString(R.string.token_keystore_unavailable)))
@@ -112,21 +144,18 @@ class SettingsActivity : Activity() {
         instructions = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(0, dp(8), 0, 0)
-            visibility = android.view.View.GONE
+            visibility = View.GONE
         }
-        buildSteps(instructions)
         root.addView(Button(this).apply {
             text = getString(R.string.show_hub_steps)
             setOnClickListener {
-                val showing = instructions.visibility == android.view.View.VISIBLE
-                instructions.visibility =
-                    if (showing) android.view.View.GONE else android.view.View.VISIBLE
-                text = getString(
-                    if (showing) R.string.show_hub_steps else R.string.hide_hub_steps
-                )
+                val showing = instructions.visibility == View.VISIBLE
+                instructions.visibility = if (showing) View.GONE else View.VISIBLE
+                text = getString(if (showing) R.string.show_hub_steps else R.string.hide_hub_steps)
             }
         }, wide())
         root.addView(instructions, wide())
+        buildSteps()
 
         val scroll = ScrollView(this).apply {
             addView(
@@ -148,20 +177,19 @@ class SettingsActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        // 画面を開くたびに通信はしない。保存済みかどうかだけを反映する。
-        renderPreview(
-            if (Prefs.isConfigured(this)) {
-                HubClient.Result.Failed(getString(R.string.preview_tap_test))
-            } else {
-                HubClient.Result.NotConfigured
-            }
-        )
+        if (!Prefs.isConfigured(this)) {
+            renderPreview(HubClient.Result.NotConfigured)
+            return
+        }
+        // 設定済みなら実際に取りに行く。画面を開き直すたびに
+        // 未接続のように見えてしまうのを避ける。
+        statusText.text = getString(R.string.testing)
+        fetchInBackground(completeConfigureOnFinish = false)
     }
 
     private fun saveAndTest() {
         val url = urlField.text.toString().trim()
         val typed = tokenField.text.toString().trim()
-        // 空欄なら保存済みのトークンを保つ
         val token = if (typed.isEmpty()) Prefs.token(this) else typed
 
         if (url.isEmpty() || token.isEmpty()) {
@@ -174,14 +202,16 @@ class SettingsActivity : Activity() {
         tokenField.hint = getString(R.string.token_hint_saved)
 
         if (Prefs.token(this).isEmpty()) {
-            // Keystore に保存できなかった。平文では置かない。
             statusText.text = getString(R.string.token_keystore_unavailable)
             return
         }
 
         statusText.text = getString(R.string.testing)
+        fetchInBackground(completeConfigureOnFinish = true)
+    }
 
-        // ネットワークはメインスレッドで触れない
+    /** ネットワークはメインスレッドで触れないため別スレッドで取る。 */
+    private fun fetchInBackground(completeConfigureOnFinish: Boolean) {
         Thread {
             val result = HubClient.fetch(this)
             val message = when (result) {
@@ -201,57 +231,139 @@ class SettingsActivity : Activity() {
                 statusText.text = message
                 renderPreview(result)
                 WidgetRenderer.updateAll(this, result)
+                // 配置中なら、ここで配置を確定させる。hub に届かなくても
+                // ウィジェットは置けるようにする（状態は絵に出る）。
+                if (completeConfigureOnFinish && isConfigureFlow) completeConfigure()
             }
         }.start()
     }
 
+    private fun completeConfigure() {
+        setResult(
+            RESULT_OK,
+            Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId),
+        )
+        finish()
+    }
+
+    private fun renderPreview(result: HubClient.Result) {
+        preview.setImageBitmap(
+            DonutRenderer.render(
+                widthPx = dp(320),
+                heightPx = dp(140),
+                result = result,
+                nowEpoch = System.currentTimeMillis() / 1000,
+                night = isNight(),
+            )
+        )
+    }
+
+    private fun isNight() = (resources.configuration.uiMode and
+        Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+
+    // ------------------------------------------------------------------
+    // hub の手順
+    // ------------------------------------------------------------------
 
     /**
      * 手順を見出し・本文・コマンドに分けて組み立てる。
      * コマンドには「コピー」を付ける。端末で長押し選択させるのは現実的でない。
      *
-     * 書式は行頭の記号で決まる。"# " が見出し、"> " がコマンド（連続行は1ブロック）、
-     * それ以外は本文。
+     * 書式は行頭の記号で決まる。
+     *   "# "  見出し
+     *   "> "  コマンド（連続行は1ブロックにまとめる）
+     *   "@linux" / "@mac" / "@all"  以降の表示対象を切り替える
+     *   それ以外は本文
      */
-    private fun buildSteps(container: LinearLayout) {
-        val night = (resources.configuration.uiMode and
-            Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-        val codeBackground = if (night) Color.parseColor("#2A282C") else Color.parseColor("#F1EFF3")
+    private fun buildSteps() {
+        instructions.removeAllViews()
+        instructions.addView(osSwitch(), wide())
 
+        val codeBackground =
+            if (isNight()) Color.parseColor("#2A282C") else Color.parseColor("#F1EFF3")
         val lines = getString(R.string.hub_setup_steps).split("\n")
+
+        var visible = true
         var index = 0
         while (index < lines.size) {
             val line = lines[index]
             when {
+                line.startsWith("@") -> {
+                    visible = when (line.trim()) {
+                        "@linux" -> osMode == Os.LINUX
+                        "@mac" -> osMode == Os.MAC
+                        else -> true
+                    }
+                    index++
+                }
+                !visible -> index++
                 line.startsWith("# ") -> {
-                    container.addView(TextView(this).apply {
+                    instructions.addView(TextView(this).apply {
                         text = line.removePrefix("# ")
-                        typeface = android.graphics.Typeface.DEFAULT_BOLD
+                        typeface = Typeface.DEFAULT_BOLD
                         setPadding(0, dp(18), 0, dp(4))
                     }, wide())
                     index++
                 }
                 line.startsWith("> ") -> {
-                    // 連続するコマンド行をひとまとめにする
                     val commands = mutableListOf<String>()
                     while (index < lines.size && lines[index].startsWith("> ")) {
                         commands.add(lines[index].removePrefix("> "))
                         index++
                     }
-                    container.addView(codeBlock(commands.joinToString("\n"), codeBackground), wide())
+                    instructions.addView(
+                        codeBlock(commands.joinToString("\n"), codeBackground),
+                        wide(),
+                    )
                 }
                 line.isBlank() -> index++
                 else -> {
-                    container.addView(TextView(this).apply {
+                    instructions.addView(TextView(this).apply {
                         text = line
                         textSize = 13f
-                        setPadding(0, dp(4), 0, dp(4))
-                        setLineSpacing(0f, 1.2f)
+                        setPadding(0, dp(3), 0, dp(3))
+                        setLineSpacing(0f, 1.25f)
                     }, wide())
                     index++
                 }
             }
         }
+    }
+
+    /** Linux と macOS を切り替える。自分に関係ない手順を読まずに済む。 */
+    private fun osSwitch(): LinearLayout {
+        linuxButton = Button(this).apply {
+            text = getString(R.string.os_linux)
+            setOnClickListener { setOs(Os.LINUX) }
+        }
+        macButton = Button(this).apply {
+            text = getString(R.string.os_mac)
+            setOnClickListener { setOs(Os.MAC) }
+        }
+        applyOsHighlight()
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            addView(
+                linuxButton,
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+            )
+            addView(
+                macButton,
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+            )
+        }
+    }
+
+    private fun setOs(os: Os) {
+        if (osMode == os) return
+        osMode = os
+        buildSteps()
+    }
+
+    private fun applyOsHighlight() {
+        // 選択中がどちらかを濃さで示す
+        linuxButton.alpha = if (osMode == Os.LINUX) 1f else 0.45f
+        macButton.alpha = if (osMode == Os.MAC) 1f else 0.45f
     }
 
     private fun codeBlock(command: String, backgroundColor: Int): LinearLayout {
@@ -265,18 +377,16 @@ class SettingsActivity : Activity() {
 
             addView(TextView(this@SettingsActivity).apply {
                 text = command
-                typeface = android.graphics.Typeface.MONOSPACE
+                typeface = Typeface.MONOSPACE
                 textSize = 12f
                 setTextIsSelectable(true)
-                setHorizontallyScrolling(false)
             }, wide())
 
             addView(LinearLayout(this@SettingsActivity).apply {
-                gravity = android.view.Gravity.END
+                gravity = Gravity.END
                 addView(Button(this@SettingsActivity).apply {
                     text = getString(R.string.copy)
                     textSize = 12f
-                    minHeight = dp(36)
                     minimumHeight = dp(36)
                     setPadding(dp(14), 0, dp(14), 0)
                     setOnClickListener { copyToClipboard(command) }
@@ -287,27 +397,15 @@ class SettingsActivity : Activity() {
 
     private fun copyToClipboard(text: String) {
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
-        // ラベルは通知に出るため、中身が推測できる名前にしない
+        // ラベルは通知に出ることがあるため、中身が推測できない名前にする
         clipboard.setPrimaryClip(ClipData.newPlainText("limitchecker", text))
-        // Android 13 以降はシステムが自前で「コピーしました」を出すため重ねない
+        // Android 13 以降はシステムが自前でコピー通知を出すため重ねない
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
             Toast.makeText(this, getString(R.string.copied), Toast.LENGTH_SHORT).show()
         }
     }
 
-    private fun renderPreview(result: HubClient.Result) {
-        val night = (resources.configuration.uiMode and
-            Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-        preview.setImageBitmap(
-            DonutRenderer.render(
-                widthPx = dp(320),
-                heightPx = dp(140),
-                result = result,
-                nowEpoch = System.currentTimeMillis() / 1000,
-                night = night,
-            )
-        )
-    }
+    // ------------------------------------------------------------------
 
     private fun wide() = LinearLayout.LayoutParams(
         ViewGroup.LayoutParams.MATCH_PARENT,

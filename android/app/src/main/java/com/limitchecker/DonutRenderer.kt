@@ -14,28 +14,47 @@ import android.graphics.Typeface
  * （docs/design.md）。ウィジェット全体を1枚に描くことで、RemoteViews のレイアウト制約を
  * 避けて配置を完全に制御する。
  *
- * リングは2周（D7）。外側が5時間枠、中央が週次枠。
- * 中心は常に5時間枠の残量とリセットまでの残り時間（D8）。
+ * 配色の考え方（docs/decisions.md D12）:
+ *   赤と緑で状態を表すのは、最も多い型の色覚特性（P型・D型）で区別できなくなる。
+ *   そこで役割を分ける。
+ *     - **色相はリングの識別**に使う。外側=青、中央=オレンジ。
+ *       この組み合わせは P型・D型・T型のいずれでも判別できる（Okabe-Ito の推奨対）。
+ *     - **残量の多寡は弧の長さ**で表す。色に頼らないので誰でも読める。
+ *     - **逼迫（20%未満）だけ**を朱色にし、さらに線を太くする。
+ *       色以外の手がかりを重ねることで、色だけに依存しないようにする。
  */
 object DonutRenderer {
 
+    /**
+     * Okabe-Ito の色覚バリアフリー配色から採った値。
+     * 暗い背景では同じ色相を明るくして、コントラストを確保する。
+     */
     private class Palette(night: Boolean) {
         val background = if (night) Color.parseColor("#1C1B1F") else Color.WHITE
         val text = if (night) Color.parseColor("#E6E1E5") else Color.parseColor("#1C1B1F")
         val subText = if (night) Color.parseColor("#A8A2AB") else Color.parseColor("#5F5F63")
         val track = if (night) Color.parseColor("#3A383C") else Color.parseColor("#E4E1E6")
-        val green = if (night) Color.parseColor("#66BB6A") else Color.parseColor("#2E7D32")
-        val yellow = if (night) Color.parseColor("#FFCA28") else Color.parseColor("#EF6C00")
-        val red = if (night) Color.parseColor("#EF5350") else Color.parseColor("#C62828")
+
+        /** 外側（5時間枠）= 青 */
+        val outerHue = if (night) Color.parseColor("#56B4E9") else Color.parseColor("#0072B2")
+
+        /** 中央（週次枠）= オレンジ */
+        val middleHue = if (night) Color.parseColor("#E69F00") else Color.parseColor("#D68A00")
+
+        /** 逼迫時 = 朱色。青ともオレンジとも判別できる */
+        val critical = if (night) Color.parseColor("#FF7043") else Color.parseColor("#D55E00")
+
         val gray = if (night) Color.parseColor("#6E6A70") else Color.parseColor("#9E9A9F")
     }
 
-    /** 配色のしきい値は agent 側と同じ（docs/design.md）。 */
-    private fun colorFor(palette: Palette, remaining: Double): Int = when {
-        remaining > 0.50 -> palette.green
-        remaining >= 0.20 -> palette.yellow
-        else -> palette.red
-    }
+    /** これを下回ったら朱色にして線を太くする。 */
+    private const val CRITICAL = 0.20
+
+    private fun hueFor(palette: Palette, slot: String): Int =
+        if (slot == "outer") palette.outerHue else palette.middleHue
+
+    /** この幅（dp）を下回ったらドーナツを1つだけ出す。2つ並べると小さくなりすぎるため。 */
+    private const val TWO_COLUMN_MIN_DP = 190
 
     fun render(
         widthPx: Int,
@@ -43,6 +62,7 @@ object DonutRenderer {
         result: HubClient.Result,
         nowEpoch: Long,
         night: Boolean,
+        widthDp: Int = TWO_COLUMN_MIN_DP,
     ): Bitmap {
         val width = widthPx.coerceAtLeast(1)
         val height = heightPx.coerceAtLeast(1)
@@ -63,7 +83,7 @@ object DonutRenderer {
             is HubClient.Result.Failed ->
                 drawMessage(canvas, width, height, palette, result.reason)
             is HubClient.Result.Ok ->
-                drawServices(canvas, width, height, palette, result.status, nowEpoch)
+                drawServices(canvas, width, height, palette, result.status, nowEpoch, widthDp)
         }
         return bitmap
     }
@@ -80,9 +100,21 @@ object DonutRenderer {
     }
 
     private fun drawServices(
-        canvas: Canvas, width: Int, height: Int, palette: Palette, status: Status, nowEpoch: Long,
+        canvas: Canvas,
+        width: Int,
+        height: Int,
+        palette: Palette,
+        status: Status,
+        nowEpoch: Long,
+        widthDp: Int,
     ) {
-        val ids = listOf("claude_code", "codex")
+        // 狭いウィジェットに2つ押し込むと、どちらも読めない大きさになる。
+        // その場合は Claude Code だけを大きく出す。
+        val ids = if (widthDp < TWO_COLUMN_MIN_DP) {
+            listOf("claude_code")
+        } else {
+            listOf("claude_code", "codex")
+        }
         val columnWidth = width / ids.size.toFloat()
         ids.forEachIndexed { index, id ->
             drawService(
@@ -109,20 +141,22 @@ object DonutRenderer {
         nowEpoch: Long,
     ) {
         val padding = width * 0.10f
-        val labelSize = width * 0.11f
+        val labelSize = (width * 0.11f).coerceAtMost(height * 0.12f)
         val available = width - padding * 2
         val diameter = minOf(available, height - padding * 2 - labelSize * 1.6f)
         if (diameter <= 0f) return
 
+        // 縦に広いウィジェットでは下半分が空いてしまうので、全体を縦中央に寄せる。
+        val contentHeight = diameter + labelSize * 1.6f
+        val top = ((height - contentHeight) / 2f).coerceAtLeast(padding)
+
         val centerX = left + width / 2f
-        val centerY = padding + diameter / 2f
+        val centerY = top + diameter / 2f
         val stroke = diameter * 0.095f
         val gap = stroke * 0.55f
 
         val freshness = Freshness.of(service?.updatedAtEpoch, nowEpoch)
-        // 取得できていない、または1時間以上古ければグレー（D1）
         val dead = service == null || !service.available || freshness == Freshness.EXPIRED
-        // 10分〜1時間は薄く見せる
         val alpha = if (freshness == Freshness.STALE && !dead) 150 else 255
 
         val outerRadius = diameter / 2f - stroke / 2f
@@ -134,32 +168,32 @@ object DonutRenderer {
         drawRing(canvas, centerX, centerY, outerRadius, stroke, palette, outer, dead, alpha)
         drawRing(canvas, centerX, centerY, middleRadius, stroke, palette, middle, dead, alpha)
 
-        // 中心は常に5時間枠（D8）
-        val bigPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        // 中心にはリセットまでの残り時間を置く。常に5時間枠（D8）。
+        // 残量の数字は置かない。弧の長さが残量を表しているため（D13）。
+        val centerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = if (dead) palette.gray else palette.text
             this.alpha = alpha
             textAlign = Paint.Align.CENTER
-            textSize = diameter * 0.24f
+            textSize = diameter * 0.19f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         }
-        val smallPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = if (dead) palette.gray else palette.subText
+        val captionPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = palette.subText
             this.alpha = alpha
             textAlign = Paint.Align.CENTER
-            textSize = diameter * 0.125f
+            textSize = diameter * 0.11f
         }
 
-        val bigText = if (dead || outer == null) "—" else "${Math.round(outer.remaining * 100)}%"
-        canvas.drawText(bigText, centerX, centerY + bigPaint.textSize * 0.20f, bigPaint)
-
-        val subText = when {
+        val centerText = when {
             service == null || !service.available -> "取得不可"
-            freshness == Freshness.EXPIRED -> "更新できません"
+            freshness == Freshness.EXPIRED -> "未更新"
             outer?.resetsAtEpoch != null -> formatCountdown(outer.resetsAtEpoch - nowEpoch)
-            else -> ""
+            else -> "—"
         }
-        if (subText.isNotEmpty()) {
-            canvas.drawText(subText, centerX, centerY + bigPaint.textSize * 0.95f, smallPaint)
+        canvas.drawText(centerText, centerX, centerY + centerPaint.textSize * 0.35f, centerPaint)
+
+        if (!dead && centerText != "—") {
+            canvas.drawText("後に回復", centerX, centerY + centerPaint.textSize * 1.25f, captionPaint)
         }
 
         val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -170,7 +204,7 @@ object DonutRenderer {
         canvas.drawText(
             service?.label ?: fallbackLabel,
             centerX,
-            padding + diameter + labelSize * 1.1f,
+            top + diameter + labelSize * 1.1f,
             labelPaint,
         )
     }
@@ -187,7 +221,6 @@ object DonutRenderer {
         alpha: Int,
     ) {
         if (radius <= 0f) return
-        val bounds = RectF(centerX - radius, centerY - radius, centerX + radius, centerY + radius)
 
         val trackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
@@ -198,24 +231,29 @@ object DonutRenderer {
 
         if (dead || ring == null) return
 
-        // 残量を12時方向から時計回りに描く。残量が減ると弧が短くなる。
+        val isCritical = ring.remaining < CRITICAL
+        // 逼迫時は色だけでなく線の太さも変える。色に依存しない手がかりを重ねる。
+        val width = if (isCritical) stroke * 1.25f else stroke
+        val bounds = RectF(centerX - radius, centerY - radius, centerX + radius, centerY + radius)
+
         val arcPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
-            strokeWidth = stroke
+            strokeWidth = width
             strokeCap = Paint.Cap.ROUND
-            color = colorFor(palette, ring.remaining)
+            color = if (isCritical) palette.critical else hueFor(palette, ring.slot)
             this.alpha = alpha
         }
+        // 残量を12時方向から時計回りに描く。残量が減ると弧が短くなる。
         val sweep = (ring.remaining * 360.0).toFloat()
         if (sweep > 0.5f) {
             canvas.drawArc(bounds, -90f, sweep, false, arcPaint)
         }
     }
 
-    /** 1日未満は "H:MM"、それ以上は "Nd"。 */
+    /** 1日未満は "H:MM"、それ以上は "N日"。 */
     private fun formatCountdown(seconds: Long): String {
-        if (seconds <= 0) return ""
-        if (seconds >= 86_400) return "${seconds / 86_400}d"
+        if (seconds <= 0) return "まもなく"
+        if (seconds >= 86_400) return "${seconds / 86_400}日"
         return "${seconds / 3600}:${"%02d".format((seconds % 3600) / 60)}"
     }
 }
