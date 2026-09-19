@@ -1,7 +1,13 @@
 package com.limitchecker
 
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.res.Configuration
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.os.Bundle
 import android.text.InputType
 import android.util.TypedValue
@@ -11,6 +17,7 @@ import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.Toast
 import android.widget.TextView
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -28,7 +35,7 @@ class SettingsActivity : Activity() {
     private lateinit var tokenField: EditText
     private lateinit var statusText: TextView
     private lateinit var preview: ImageView
-    private lateinit var instructions: TextView
+    private lateinit var instructions: LinearLayout
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -102,16 +109,12 @@ class SettingsActivity : Activity() {
         )
 
         // ---- hub の手順 ----
-        instructions = TextView(this).apply {
-            text = getString(R.string.hub_setup_steps)
-            setPadding(0, dp(12), 0, 0)
-            setTextIsSelectable(true)
-            // コマンドを含むので等幅にする。桁が揃わないと読みにくい。
-            typeface = android.graphics.Typeface.MONOSPACE
-            textSize = 11f
-            setLineSpacing(0f, 1.15f)
+        instructions = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(8), 0, 0)
             visibility = android.view.View.GONE
         }
+        buildSteps(instructions)
         root.addView(Button(this).apply {
             text = getString(R.string.show_hub_steps)
             setOnClickListener {
@@ -123,7 +126,7 @@ class SettingsActivity : Activity() {
                 )
             }
         }, wide())
-        root.addView(instructions)
+        root.addView(instructions, wide())
 
         val scroll = ScrollView(this).apply {
             addView(
@@ -200,6 +203,96 @@ class SettingsActivity : Activity() {
                 WidgetRenderer.updateAll(this, result)
             }
         }.start()
+    }
+
+
+    /**
+     * 手順を見出し・本文・コマンドに分けて組み立てる。
+     * コマンドには「コピー」を付ける。端末で長押し選択させるのは現実的でない。
+     *
+     * 書式は行頭の記号で決まる。"# " が見出し、"> " がコマンド（連続行は1ブロック）、
+     * それ以外は本文。
+     */
+    private fun buildSteps(container: LinearLayout) {
+        val night = (resources.configuration.uiMode and
+            Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+        val codeBackground = if (night) Color.parseColor("#2A282C") else Color.parseColor("#F1EFF3")
+
+        val lines = getString(R.string.hub_setup_steps).split("\n")
+        var index = 0
+        while (index < lines.size) {
+            val line = lines[index]
+            when {
+                line.startsWith("# ") -> {
+                    container.addView(TextView(this).apply {
+                        text = line.removePrefix("# ")
+                        typeface = android.graphics.Typeface.DEFAULT_BOLD
+                        setPadding(0, dp(18), 0, dp(4))
+                    }, wide())
+                    index++
+                }
+                line.startsWith("> ") -> {
+                    // 連続するコマンド行をひとまとめにする
+                    val commands = mutableListOf<String>()
+                    while (index < lines.size && lines[index].startsWith("> ")) {
+                        commands.add(lines[index].removePrefix("> "))
+                        index++
+                    }
+                    container.addView(codeBlock(commands.joinToString("\n"), codeBackground), wide())
+                }
+                line.isBlank() -> index++
+                else -> {
+                    container.addView(TextView(this).apply {
+                        text = line
+                        textSize = 13f
+                        setPadding(0, dp(4), 0, dp(4))
+                        setLineSpacing(0f, 1.2f)
+                    }, wide())
+                    index++
+                }
+            }
+        }
+    }
+
+    private fun codeBlock(command: String, backgroundColor: Int): LinearLayout {
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = GradientDrawable().apply {
+                cornerRadius = dp(8).toFloat()
+                setColor(backgroundColor)
+            }
+            setPadding(dp(12), dp(10), dp(12), dp(6))
+
+            addView(TextView(this@SettingsActivity).apply {
+                text = command
+                typeface = android.graphics.Typeface.MONOSPACE
+                textSize = 12f
+                setTextIsSelectable(true)
+                setHorizontallyScrolling(false)
+            }, wide())
+
+            addView(LinearLayout(this@SettingsActivity).apply {
+                gravity = android.view.Gravity.END
+                addView(Button(this@SettingsActivity).apply {
+                    text = getString(R.string.copy)
+                    textSize = 12f
+                    minHeight = dp(36)
+                    minimumHeight = dp(36)
+                    setPadding(dp(14), 0, dp(14), 0)
+                    setOnClickListener { copyToClipboard(command) }
+                })
+            }, wide())
+        }
+    }
+
+    private fun copyToClipboard(text: String) {
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
+        // ラベルは通知に出るため、中身が推測できる名前にしない
+        clipboard.setPrimaryClip(ClipData.newPlainText("limitchecker", text))
+        // Android 13 以降はシステムが自前で「コピーしました」を出すため重ねない
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            Toast.makeText(this, getString(R.string.copied), Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun renderPreview(result: HubClient.Result) {
