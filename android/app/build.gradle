@@ -1,0 +1,40 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace = 'com.limitchecker'
+    compileSdk 37
+    defaultConfig {
+        applicationId "com.limitchecker"
+        minSdk 31
+        targetSdk 37
+        versionCode 1
+        versionName "0.1.0"
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
+    }
+}
+
+dependencies {
+    // 依存は最小限にする。HTTP は HttpURLConnection、画面は素の Activity で足りる。
+    // 公開リポジトリとして、監査対象が少ないほうがよい。
+    implementation 'androidx.core:core-ktx:1.19.0'
+    implementation 'androidx.work:work-runtime-ktx:2.10.0'
+}

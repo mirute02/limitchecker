@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 平文 HTTP は接続先を限定する（docs/security.md）。
+     hub は Tailscale 内に置く前提なので、MagicDNS 名（*.ts.net）と
+     この端末自身のみ平文を許す。それ以外は HTTPS を必須にする。 -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">127.0.0.1</domain>
+        <domain includeSubdomains="true">ts.net</domain>
+    </domain-config>
+</network-security-config>

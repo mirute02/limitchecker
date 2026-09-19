@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">limitchecker</string>
+    <string name="widget_label">残スタミナ</string>
+    <string name="widget_description">Claude Code と Codex の残量</string>
+
+    <string name="settings_title">limitchecker の設定</string>
+    <string name="hub_url_label">hub の URL</string>
+    <string name="token_label">トークン</string>
+    <string name="token_hint_empty">.env の LIMITCHECKER_TOKEN</string>
+    <string name="token_hint_saved">保存済み（変更する場合のみ入力）</string>
+    <string name="save_and_test">保存して接続を確認</string>
+    <string name="settings_help">平文 HTTP で接続できるのは、この端末自身と *.ts.net のみです。それ以外は HTTPS が必要です。</string>
+    <string name="testing">確認中…</string>
+    <string name="ok_with_value">接続できました。5時間枠の残りは %1$d%% です。</string>
+    <string name="ok_no_data">接続できましたが、まだ残量が届いていません。作業マシンで Claude Code を一度動かしてください。</string>
+    <string name="error_incomplete">URL とトークンの両方が必要です。</string>
+    <string name="error_failed">接続できません: %1$s</string>
+    <string name="preview_label">ウィジェットの見え方</string>
+    <string name="preview_tap_test">「保存して接続を確認」を押してください</string>
+</resources>

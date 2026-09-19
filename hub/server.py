@@ -144,9 +144,15 @@ def clean_report(payload: dict) -> dict | None:
 
 
 def iso(ts) -> str | None:
+    """RFC3339 形式で返す。
+
+    strftime の %z は "+0900" を返すが、Android の java.time は "+09:00" を
+    期待する。コロンを入れて相互運用できる形にする。
+    """
     if ts is None:
         return None
-    return time.strftime("%Y-%m-%dT%H:%M:%S%z", time.localtime(int(ts)))
+    stamp = time.strftime("%Y-%m-%dT%H:%M:%S%z", time.localtime(int(ts)))
+    return stamp[:-2] + ":" + stamp[-2:] if len(stamp) >= 5 else stamp
 
 
 def build_status(store: dict) -> dict:
