@@ -1,0 +1,48 @@
+# ---- 機密情報（最優先） ----
+# hub の認証トークン、Tailscale アドレス、マシン名などの実値
+.env
+.env.*
+!.env.example
+*.token
+secrets/
+config.local.*
+**/local.properties
+
+# 署名鍵（漏れると第三者が同一パッケージ名の偽アプリを配布できる）
+*.jks
+*.keystore
+keystore.properties
+
+# Firebase / プッシュ通知の設定（プロジェクト ID と API キーを含む）
+google-services.json
+GoogleService-Info.plist
+
+# ---- 収集データ（セッションID・作業ディレクトリ・会話内容を含みうる） ----
+# statusLine / フックのキャプチャ結果、hub の DB、ログ
+captures/
+var/
+*.db
+*.sqlite
+*.sqlite3
+*.log
+
+# ---- ビルド生成物 ----
+.gradle/
+build/
+*.apk
+*.aab
+*.ap_
+*.dex
+.cxx/
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# ---- エディタ・OS ----
+.idea/
+.vscode/
+.DS_Store
+*.swp
