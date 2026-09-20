@@ -45,6 +45,26 @@ add rings.
 
 ## What it looks like
 
+<table>
+  <tr>
+    <td width="55%" valign="top">
+      <img src="docs/images/widget-bars.png" alt="Horizontal bar widget showing the five-hour and weekly windows for Claude Code and Codex, each with a bar, a percentage and the time until reset">
+      <br><sub><b>Horizontal bars</b> (≥ 220dp wide, ≥ 170dp tall)</sub>
+    </td>
+    <td width="45%" valign="top">
+      <img src="docs/images/widget-split.png" alt="Two donuts side by side: Claude Code on the left, Codex on the right">
+      <br><sub><b>Two donuts</b> (≥ 190dp wide)</sub>
+      <br><br>
+      <img src="docs/images/widget-compact.png" alt="A single small donut with the time until reset in the middle">
+      <br><sub><b>A single donut</b> (1×1 and similar)</sub>
+    </td>
+  </tr>
+</table>
+
+<img src="docs/images/notification.png" width="480" alt="The notification area entry: the five-hour windows in the title, the weekly windows in the body">
+
+<sub><b>Pinned to the notification area.</b> Title is the five-hour window, body is the weekly one</sub>
+
 The representation changes with the available area.
 
 | Size | Representation |

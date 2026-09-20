@@ -41,6 +41,26 @@ Claude Code と Codex の残量を、Android のホーム画面と通知領域�
 
 ## 表示
 
+<table>
+  <tr>
+    <td width="55%" valign="top">
+      <img src="docs/images/widget-bars.png" alt="横棒のウィジェット。Claude Code と Codex それぞれの5時間枠と週次枠を、残量の棒・パーセント・回復までの時間で並べている">
+      <br><sub><b>横棒</b>（幅220dp・高さ170dp 以上）</sub>
+    </td>
+    <td width="45%" valign="top">
+      <img src="docs/images/widget-split.png" alt="ドーナツを横に2つ並べたウィジェット。左が Claude Code、右が Codex">
+      <br><sub><b>ドーナツ2つ</b>（幅190dp 以上）</sub>
+      <br><br>
+      <img src="docs/images/widget-compact.png" alt="ドーナツ1つの小さいウィジェット。中央に回復までの時間">
+      <br><sub><b>ドーナツ1つ</b>（1×1 など）</sub>
+    </td>
+  </tr>
+</table>
+
+<img src="docs/images/notification.png" width="480" alt="通知センターに常設した表示。見出しに Claude と Codex の5時間枠、本文に週次枠">
+
+<sub><b>通知センターに常設</b>。見出しが5時間枠、本文が週次枠</sub>
+
 大きさに応じて表現が変わる。
 
 | 大きさ | 表現 |
