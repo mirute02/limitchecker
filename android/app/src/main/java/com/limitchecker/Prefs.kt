@@ -15,6 +15,8 @@ object Prefs {
     internal const val FILE = "limitchecker"
     private const val KEY_URL = "hub_url"
     private const val KEY_NOTIFICATION = "notification_enabled"
+    private const val KEY_STATUS_ICON = "status_icon_mode"
+    private const val KEY_WIDGET_BG = "widget_background"
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
@@ -32,6 +34,22 @@ object Prefs {
 
     fun setNotificationEnabled(context: Context, enabled: Boolean) {
         prefs(context).edit().putBoolean(KEY_NOTIFICATION, enabled).apply()
+    }
+
+    /** ステータスバーに何を出すか。 */
+    fun statusIconMode(context: Context): StatusIconMode =
+        StatusIconMode.fromKey(prefs(context).getString(KEY_STATUS_ICON, null))
+
+    fun setStatusIconMode(context: Context, mode: StatusIconMode) {
+        prefs(context).edit().putString(KEY_STATUS_ICON, mode.key).apply()
+    }
+
+    /** ウィジェットの背景の濃さ。 */
+    fun widgetBackground(context: Context): WidgetBackground =
+        WidgetBackground.fromKey(prefs(context).getString(KEY_WIDGET_BG, null))
+
+    fun setWidgetBackground(context: Context, background: WidgetBackground) {
+        prefs(context).edit().putString(KEY_WIDGET_BG, background.key).apply()
     }
 
     fun save(context: Context, url: String, token: String) {

@@ -77,4 +77,16 @@ URL とトークンを入れて「保存して接続を確認」を押します�
     <string name="notification_disable">常設をやめる</string>
     <string name="notification_note">ステータスバーにはドーナツの形で出ます。OS が小アイコンを単色で塗るため色は出ませんが、濃淡は残るので残量が読めます。通知を開くとリングの絵と数字が出ます。音は鳴りません。</string>
     <string name="notification_denied">通知が許可されていません。端末の設定から許可してください。</string>
+    <string name="status_icon_label">ステータスバーに出すもの</string>
+    <string name="status_icon_note">時計や電池が並ぶ行に置けるのは小さなアイコン1つだけです。どれを選んでも読める大きさを保つため、出せるのは1種類だけになります。詳しい値は通知を引き下ろせば見えます。</string>
+    <string name="mode_rings_both">ドーナツ（5時間＋週次）</string>
+    <string name="mode_ring_5h">ドーナツ（5時間のみ）</string>
+    <string name="mode_ring_week">ドーナツ（週次のみ）</string>
+    <string name="mode_pct_5h">数字（5時間の残量）</string>
+    <string name="mode_pct_week">数字（週次の残量）</string>
+    <string name="mode_reset_5h">数字（5時間の回復まで）</string>
+    <string name="bg_label">ウィジェットの背景</string>
+    <string name="bg_opaque">不透明</string>
+    <string name="bg_translucent">半透明</string>
+    <string name="bg_transparent">透過</string>
 </resources>

@@ -23,6 +23,8 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.RadioButton
+import android.widget.RadioGroup
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
@@ -46,6 +48,9 @@ class SettingsActivity : Activity() {
     private lateinit var notificationButton: Button
     /** ウィジェット配置から呼ばれた場合の ID。通常起動では INVALID。 */
     private var appWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
+
+    /** 背景を切り替えたときに再描画するため、直近の取得結果を持っておく。 */
+    private var lastResult: HubClient.Result = HubClient.Result.NotConfigured
 
     private val isConfigureFlow: Boolean
         get() = appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID
@@ -128,6 +133,9 @@ class SettingsActivity : Activity() {
         root.addView(statusText)
 
         // ---- プレビュー ----
+        root.addView(label(getString(R.string.bg_label)))
+        root.addView(backgroundChooser(), wide())
+
         root.addView(label(getString(R.string.preview_label)))
         preview = ImageView(this).apply { adjustViewBounds = true }
         root.addView(
@@ -143,6 +151,11 @@ class SettingsActivity : Activity() {
         root.addView(notificationButton, wide())
         root.addView(note(getString(R.string.notification_note)))
         applyNotificationLabel()
+
+        // ---- ステータスバーに出すもの ----
+        root.addView(label(getString(R.string.status_icon_label)))
+        root.addView(statusIconChooser(), wide())
+        root.addView(note(getString(R.string.status_icon_note)))
 
         // ---- hub の手順 ----
         instructions = LinearLayout(this).apply {
@@ -307,7 +320,59 @@ class SettingsActivity : Activity() {
         }
     }
 
+    /** ウィジェットの背景の濃さを選ばせる。選んだらプレビューに即反映する。 */
+    private fun backgroundChooser(): RadioGroup {
+        val current = Prefs.widgetBackground(this)
+        return RadioGroup(this).apply {
+            orientation = RadioGroup.HORIZONTAL
+            WidgetBackground.entries.forEach { background ->
+                addView(RadioButton(this@SettingsActivity).apply {
+                    id = View.generateViewId()
+                    text = getString(background.labelRes)
+                    tag = background
+                    isChecked = background == current
+                })
+            }
+            setOnCheckedChangeListener { group, checkedId ->
+                val background = group.findViewById<RadioButton>(checkedId)?.tag as? WidgetBackground
+                    ?: return@setOnCheckedChangeListener
+                Prefs.setWidgetBackground(this@SettingsActivity, background)
+                renderPreview(lastResult)
+                RefreshWorker.refreshNow(this@SettingsActivity, force = true)
+            }
+        }
+    }
+
+    /**
+     * ステータスバーに出す内容を選ばせる。
+     * 変えたら即座に描き直す。次の定期実行まで待たせない。
+     */
+    private fun statusIconChooser(): RadioGroup {
+        val current = Prefs.statusIconMode(this)
+        return RadioGroup(this).apply {
+            orientation = RadioGroup.VERTICAL
+            StatusIconMode.entries.forEach { mode ->
+                addView(RadioButton(this@SettingsActivity).apply {
+                    id = View.generateViewId()
+                    text = getString(mode.labelRes)
+                    tag = mode
+                    isChecked = mode == current
+                    setPadding(paddingLeft, dp(6), paddingRight, dp(6))
+                })
+            }
+            setOnCheckedChangeListener { group, checkedId ->
+                val mode = group.findViewById<RadioButton>(checkedId)?.tag as? StatusIconMode
+                    ?: return@setOnCheckedChangeListener
+                Prefs.setStatusIconMode(this@SettingsActivity, mode)
+                if (Prefs.notificationEnabled(this@SettingsActivity)) {
+                    RefreshWorker.refreshNow(this@SettingsActivity, force = true)
+                }
+            }
+        }
+    }
+
     private fun renderPreview(result: HubClient.Result) {
+        lastResult = result
         preview.setImageBitmap(
             DonutRenderer.render(
                 widthPx = dp(320),
@@ -315,6 +380,7 @@ class SettingsActivity : Activity() {
                 result = result,
                 nowEpoch = System.currentTimeMillis() / 1000,
                 night = isNight(),
+                background = Prefs.widgetBackground(this),
             )
         )
     }
@@ -355,15 +421,13 @@ class SettingsActivity : Activity() {
                     index++
                 }
                 line.startsWith("> ") -> {
-                    val commands = mutableListOf<String>()
-                    while (index < lines.size && lines[index].startsWith("> ")) {
-                        commands.add(lines[index].removePrefix("> "))
-                        index++
-                    }
+                    // まとめず1コマンドずつ出す。どのボタンが何をコピーするかを
+                    // 迷わせないため。
                     instructions.addView(
-                        codeBlock(commands.joinToString("\n"), codeBackground),
+                        codeBlock(line.removePrefix("> "), codeBackground),
                         wide(),
                     )
+                    index++
                 }
                 line.isBlank() -> index++
                 else -> {
@@ -380,32 +444,38 @@ class SettingsActivity : Activity() {
     }
 
 
+    /** コマンド1つと、それをコピーするボタンを横に並べる。 */
     private fun codeBlock(command: String, backgroundColor: Int): LinearLayout {
         return LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
             background = GradientDrawable().apply {
                 cornerRadius = dp(8).toFloat()
                 setColor(backgroundColor)
             }
-            setPadding(dp(12), dp(10), dp(12), dp(6))
+            setPadding(dp(12), dp(8), dp(8), dp(8))
+            // 行の間隔を空けて、どれが1コマンドかを見て分かるようにする
+            val params = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp(6) }
+            layoutParams = params
 
             addView(TextView(this@SettingsActivity).apply {
                 text = command
                 typeface = Typeface.MONOSPACE
                 textSize = 12f
                 setTextIsSelectable(true)
-            }, wide())
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
 
-            addView(LinearLayout(this@SettingsActivity).apply {
-                gravity = Gravity.END
-                addView(Button(this@SettingsActivity).apply {
-                    text = getString(R.string.copy)
-                    textSize = 12f
-                    minimumHeight = dp(36)
-                    setPadding(dp(14), 0, dp(14), 0)
-                    setOnClickListener { copyToClipboard(command) }
-                })
-            }, wide())
+            addView(Button(this@SettingsActivity).apply {
+                text = getString(R.string.copy)
+                textSize = 12f
+                minWidth = dp(72)
+                minimumHeight = dp(40)
+                setPadding(dp(10), 0, dp(10), 0)
+                setOnClickListener { copyToClipboard(command) }
+            })
         }
     }
 

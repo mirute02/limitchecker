@@ -29,7 +29,8 @@ object DonutRenderer {
      * Okabe-Ito の色覚バリアフリー配色から採った値。
      * 暗い背景では同じ色相を明るくして、コントラストを確保する。
      */
-    private class Palette(night: Boolean) {
+    private class Palette(val isNight: Boolean) {
+        private val night = isNight
         val background = if (night) Color.parseColor("#1C1B1F") else Color.WHITE
         val text = if (night) Color.parseColor("#E6E1E5") else Color.parseColor("#1C1B1F")
         val subText = if (night) Color.parseColor("#A8A2AB") else Color.parseColor("#5F5F63")
@@ -66,6 +67,7 @@ object DonutRenderer {
         nowEpoch: Long,
         night: Boolean,
         widthDp: Int = TWO_COLUMN_MIN_DP,
+        background: WidgetBackground = WidgetBackground.OPAQUE,
     ): Bitmap {
         val width = widthPx.coerceAtLeast(1)
         val height = heightPx.coerceAtLeast(1)
@@ -73,31 +75,46 @@ object DonutRenderer {
         val canvas = Canvas(bitmap)
         val palette = Palette(night)
 
-        val radius = minOf(width, height) * 0.10f
-        canvas.drawRoundRect(
-            RectF(0f, 0f, width.toFloat(), height.toFloat()),
-            radius, radius,
-            Paint(Paint.ANTI_ALIAS_FLAG).apply { color = palette.background },
-        )
+        if (background.alpha > 0) {
+            val radius = minOf(width, height) * 0.10f
+            canvas.drawRoundRect(
+                RectF(0f, 0f, width.toFloat(), height.toFloat()),
+                radius, radius,
+                Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = palette.background
+                    alpha = background.alpha
+                },
+            )
+        }
+        // 背景を抜くと壁紙の色次第で文字が沈むため、影で輪郭を残す
+        val shadow = background != WidgetBackground.OPAQUE
 
         when (result) {
             is HubClient.Result.NotConfigured ->
-                drawMessage(canvas, width, height, palette, "タップして hub を設定")
+                drawMessage(canvas, width, height, palette, "タップして hub を設定", shadow)
             is HubClient.Result.Failed ->
-                drawMessage(canvas, width, height, palette, result.reason)
+                drawMessage(canvas, width, height, palette, result.reason, shadow)
             is HubClient.Result.Ok ->
-                drawServices(canvas, width, height, palette, result.status, nowEpoch, widthDp)
+                drawServices(canvas, width, height, palette, result.status, nowEpoch, widthDp, shadow)
         }
         return bitmap
     }
 
+    /** 透過時の可読性を保つための影。明るい壁紙でも暗い壁紙でも輪郭が残る。 */
+    private fun Paint.applyShadow(enabled: Boolean, night: Boolean, size: Float) {
+        if (!enabled) return
+        setShadowLayer(size * 0.14f, 0f, 0f, if (night) Color.BLACK else Color.WHITE)
+    }
+
     private fun drawMessage(
         canvas: Canvas, width: Int, height: Int, palette: Palette, message: String,
+        shadow: Boolean = false,
     ) {
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = palette.subText
             textAlign = Paint.Align.CENTER
             textSize = minOf(width, height) * 0.11f
+            applyShadow(shadow, palette.isNight, textSize)
         }
         canvas.drawText(message, width / 2f, height / 2f + paint.textSize / 3f, paint)
     }
@@ -110,6 +127,7 @@ object DonutRenderer {
         status: Status,
         nowEpoch: Long,
         widthDp: Int,
+        shadow: Boolean,
     ) {
         // 狭いウィジェットに2つ押し込むと、どちらも読めない大きさになる。
         // その場合は Claude Code だけを大きく出す。
@@ -132,6 +150,7 @@ object DonutRenderer {
                 fallbackLabel = if (id == "codex") "Codex" else "Claude Code",
                 nowEpoch = nowEpoch,
                 compact = compact,
+                shadow = shadow,
             )
         }
     }
@@ -146,6 +165,7 @@ object DonutRenderer {
         fallbackLabel: String,
         nowEpoch: Long,
         compact: Boolean,
+        shadow: Boolean,
     ) {
         val padding = width * (if (compact) 0.06f else 0.10f)
         // 省略形ではサービス名を出さない。その分リングを大きく取る。
@@ -184,12 +204,14 @@ object DonutRenderer {
             textAlign = Paint.Align.CENTER
             textSize = diameter * (if (compact) 0.26f else 0.19f)
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            applyShadow(shadow, palette.isNight, textSize)
         }
         val captionPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = palette.subText
             this.alpha = alpha
             textAlign = Paint.Align.CENTER
             textSize = diameter * 0.11f
+            applyShadow(shadow, palette.isNight, textSize)
         }
 
         val centerText = when {
@@ -211,6 +233,7 @@ object DonutRenderer {
             color = palette.subText
             textAlign = Paint.Align.CENTER
             textSize = labelSize
+            applyShadow(shadow, palette.isNight, textSize)
         }
         canvas.drawText(
             service?.label ?: fallbackLabel,
@@ -273,35 +296,89 @@ object DonutRenderer {
      * **半透明は半透明のまま残る**。そこで薄いトラックの上に濃い弧を重ねると、
      * 単色でもドーナツとして読める。電池アイコンと同じ読み方ができる。
      *
-     * 数字にすると 24dp では2桁で潰れるため、形で表す。
-     * 正確な値は通知を開けば出る。
+     * 何を出すかは利用者が選ぶ（[StatusIconMode]）。24dp しかないため、
+     * どのモードでも出す情報は1種類に絞る。
      */
-    fun renderStatusBarIcon(sizePx: Int, outerRemaining: Double?, middleRemaining: Double?): Bitmap {
+    fun renderStatusBarIcon(
+        sizePx: Int,
+        mode: StatusIconMode,
+        outer: Ring?,
+        middle: Ring?,
+        nowEpoch: Long,
+    ): Bitmap {
         val size = sizePx.coerceAtLeast(1)
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         val center = size / 2f
 
-        if (outerRemaining == null) {
-            val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = Color.WHITE
-                textAlign = Paint.Align.CENTER
-                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                textSize = size * 0.80f
-            }
-            canvas.drawText("?", center, size * 0.76f, paint)
+        // 取得できていないことは、どのモードでも同じ形で示す
+        val unavailable = when (mode) {
+            StatusIconMode.RING_WEEK, StatusIconMode.PCT_WEEK -> middle == null
+            else -> outer == null
+        }
+        if (unavailable) {
+            drawIconText(canvas, size, "?")
             return bitmap
         }
 
-        val stroke = size * 0.17f
-        val outerRadius = center - stroke / 2f - size * 0.04f
-        val middleRadius = outerRadius - stroke * 1.35f
-
-        drawIconRing(canvas, center, outerRadius, stroke, outerRemaining)
-        if (middleRemaining != null && middleRadius > stroke) {
-            drawIconRing(canvas, center, middleRadius, stroke, middleRemaining)
+        when (mode) {
+            StatusIconMode.RINGS_BOTH -> {
+                val stroke = size * 0.17f
+                val outerRadius = center - stroke / 2f - size * 0.04f
+                val middleRadius = outerRadius - stroke * 1.35f
+                drawIconRing(canvas, center, outerRadius, stroke, outer!!.remaining)
+                if (middle != null && middleRadius > stroke) {
+                    drawIconRing(canvas, center, middleRadius, stroke, middle.remaining)
+                }
+            }
+            StatusIconMode.RING_5H, StatusIconMode.RING_WEEK -> {
+                // 1本だけなら太く描ける。形が読み取りやすくなる。
+                val ring = if (mode == StatusIconMode.RING_5H) outer!! else middle!!
+                val stroke = size * 0.26f
+                val radius = center - stroke / 2f - size * 0.05f
+                drawIconRing(canvas, center, radius, stroke, ring.remaining)
+            }
+            StatusIconMode.PCT_5H, StatusIconMode.PCT_WEEK -> {
+                val ring = if (mode == StatusIconMode.PCT_5H) outer!! else middle!!
+                val percent = Math.round(ring.remaining * 100).coerceIn(0, 100)
+                // 3桁は潰れるので 100 は 99 に丸める
+                drawIconText(canvas, size, if (percent >= 100) "99" else percent.toString())
+            }
+            StatusIconMode.RESET_5H -> {
+                drawIconText(canvas, size, shortCountdown(outer!!.resetsAtEpoch, nowEpoch))
+            }
         }
         return bitmap
+    }
+
+    /** 文字数に応じて大きさを変える。3文字でも潰れないようにする。 */
+    private fun drawIconText(canvas: Canvas, size: Int, text: String) {
+        val scale = when (text.length) {
+            1 -> 0.80f
+            2 -> 0.74f
+            else -> 0.56f
+        }
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            textAlign = Paint.Align.CENTER
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            textSize = size * scale
+        }
+        val metrics = paint.fontMetrics
+        val baseline = size / 2f - (metrics.ascent + metrics.descent) / 2f
+        canvas.drawText(text, size / 2f, baseline, paint)
+    }
+
+    /** アイコンに収まる長さにする。"1h" / "45m" / "4d" の3文字まで。 */
+    private fun shortCountdown(resetsAtEpoch: Long?, nowEpoch: Long): String {
+        if (resetsAtEpoch == null) return "?"
+        val remain = resetsAtEpoch - nowEpoch
+        if (remain <= 0) return "0"
+        return when {
+            remain >= 86_400 -> "${remain / 86_400}d"
+            remain >= 3_600 -> "${remain / 3_600}h"
+            else -> "${remain / 60}m"
+        }
     }
 
     private fun drawIconRing(

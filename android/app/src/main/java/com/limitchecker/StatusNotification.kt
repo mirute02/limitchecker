@@ -91,8 +91,10 @@ object StatusNotification {
         val statusIcon = Icon.createWithBitmap(
             DonutRenderer.renderStatusBarIcon(
                 sizePx = STATUS_ICON_PX,
-                outerRemaining = if (usable) outer!!.remaining else null,
-                middleRemaining = if (usable) middle?.remaining else null,
+                mode = Prefs.statusIconMode(context),
+                outer = if (usable) outer else null,
+                middle = if (usable) middle else null,
+                nowEpoch = now,
             )
         )
 

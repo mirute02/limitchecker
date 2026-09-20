@@ -43,6 +43,7 @@ object WidgetRenderer {
             nowEpoch = System.currentTimeMillis() / 1000,
             night = night,
             widthDp = widthDp,
+            background = Prefs.widgetBackground(context),
         )
 
         val views = RemoteViews(context.packageName, R.layout.widget_limit)
