@@ -4,6 +4,14 @@ plugins {
     id 'com.android.application'
 }
 
+// 署名設定は keystore.properties から読む。鍵もパスワードもリポジトリに入れない。
+// ファイルが無ければ release は署名されない（debug ビルドには影響しない）。
+def keystorePropsFile = rootProject.file('keystore.properties')
+def keystoreProps = new Properties()
+if (keystorePropsFile.exists()) {
+    keystoreProps.load(new FileInputStream(keystorePropsFile))
+}
+
 android {
     namespace = 'com.limitchecker'
     compileSdk 37
@@ -14,8 +22,22 @@ android {
         versionCode 1
         versionName "0.1.0"
     }
+    signingConfigs {
+        if (keystorePropsFile.exists()) {
+            release {
+                storeFile file(keystoreProps['storeFile'])
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (keystorePropsFile.exists()) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
