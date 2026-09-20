@@ -138,6 +138,10 @@ class SettingsActivity : Activity() {
         root.addView(statusText)
 
         // ---- プレビュー ----
+        root.addView(label(getString(R.string.scheme_label)))
+        root.addView(schemeChooser(), wide())
+        root.addView(note(getString(R.string.scheme_note)))
+
         root.addView(label(getString(R.string.bg_label)))
         root.addView(backgroundChooser(), wide())
 
@@ -325,6 +329,60 @@ class SettingsActivity : Activity() {
         }
     }
 
+    /**
+     * 配色を選ばせる。文字だけでは分からないので、色の見本を添える。
+     * 左が外側（5時間枠）、右が中央（週次枠）。
+     */
+    private fun schemeChooser(): RadioGroup {
+        val current = Prefs.colorScheme(this)
+        val night = isNight()
+        return RadioGroup(this).apply {
+            orientation = RadioGroup.VERTICAL
+            ColorScheme.entries.forEach { scheme ->
+                val row = LinearLayout(this@SettingsActivity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                }
+                val button = RadioButton(this@SettingsActivity).apply {
+                    id = View.generateViewId()
+                    text = getString(scheme.labelRes)
+                    tag = scheme
+                    isChecked = scheme == current
+                    setPadding(paddingLeft, dp(6), dp(8), dp(6))
+                }
+                addView(button, wide())
+                // 見本は選択肢の下に小さく置く
+                val (outer, middle) = scheme.sampleColors(night)
+                addView(ImageView(this@SettingsActivity).apply {
+                    setImageBitmap(swatch(outer, middle))
+                    setPadding(dp(32), 0, 0, dp(8))
+                }, LinearLayout.LayoutParams(dp(96), dp(16)))
+            }
+            setOnCheckedChangeListener { group, checkedId ->
+                val scheme = group.findViewById<RadioButton>(checkedId)?.tag as? ColorScheme
+                    ?: return@setOnCheckedChangeListener
+                Prefs.setColorScheme(this@SettingsActivity, scheme)
+                renderPreview(lastResult)
+                RefreshWorker.refreshNow(this@SettingsActivity, force = true)
+            }
+        }
+    }
+
+    /** 配色の見本。2色を並べた小さな帯。 */
+    private fun swatch(outer: Int, middle: Int): Bitmap {
+        val w = dp(96)
+        val h = dp(16)
+        val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val radius = h / 2f
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        paint.color = outer
+        canvas.drawRoundRect(RectF(0f, 0f, w / 2f - dp(2), h.toFloat()), radius, radius, paint)
+        paint.color = middle
+        canvas.drawRoundRect(RectF(w / 2f + dp(2), 0f, w.toFloat(), h.toFloat()), radius, radius, paint)
+        return bitmap
+    }
+
     /** ウィジェットの背景の濃さを選ばせる。選んだらプレビューに即反映する。 */
     private fun backgroundChooser(): RadioGroup {
         val current = Prefs.widgetBackground(this)
@@ -385,7 +443,9 @@ class SettingsActivity : Activity() {
                 result = result,
                 nowEpoch = System.currentTimeMillis() / 1000,
                 night = isNight(),
+                heightDp = 140,
                 background = Prefs.widgetBackground(this),
+                scheme = Prefs.colorScheme(this),
             )
         )
     }
@@ -409,11 +469,29 @@ class SettingsActivity : Activity() {
 
         SetupSteps.items.forEach { item ->
             when (item) {
-                is SetupSteps.Item.Head -> instructions.addView(TextView(this).apply {
-                    text = item.text
-                    typeface = Typeface.DEFAULT_BOLD
-                    setPadding(0, dp(18), 0, dp(4))
-                }, wide())
+                is SetupSteps.Item.Head -> {
+                    instructions.addView(TextView(this).apply {
+                        text = item.text
+                        typeface = Typeface.DEFAULT_BOLD
+                        setPadding(0, dp(18), 0, dp(2))
+                    }, wide())
+                    // どこで作業するかを見出しごとに示す。
+                    // これがないと、スマホでコマンドを打とうとして詰まる。
+                    instructions.addView(TextView(this).apply {
+                        text = getString(item.where.labelRes)
+                        textSize = 12f
+                        setPadding(0, 0, 0, dp(4))
+                        setTextColor(
+                            if (item.where == SetupSteps.Where.THIS_PHONE) {
+                                if (isNight()) Color.parseColor("#56B4E9")
+                                else Color.parseColor("#0072B2")
+                            } else {
+                                if (isNight()) Color.parseColor("#E69F00")
+                                else Color.parseColor("#B87400")
+                            }
+                        )
+                    }, wide())
+                }
 
                 is SetupSteps.Item.Body -> instructions.addView(TextView(this).apply {
                     text = item.text

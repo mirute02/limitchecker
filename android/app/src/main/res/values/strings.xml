@@ -52,4 +52,13 @@
     <string name="bg_opaque">不透明</string>
     <string name="bg_translucent">半透明</string>
     <string name="bg_transparent">透過</string>
+    <string name="scheme_label">リングの配色</string>
+    <string name="scheme_note">上の2つ（外側と中央）が見分けやすいかで選んでください。上4つは色覚特性があっても区別できる組み合わせです。「信号」は残量そのものを色で表しますが、緑と赤の判別に頼ります。</string>
+    <string name="scheme_blue_orange">青とオレンジ</string>
+    <string name="scheme_blue_green">青と青緑</string>
+    <string name="scheme_blue_purple">青と赤紫</string>
+    <string name="scheme_mono">濃淡のみ</string>
+    <string name="scheme_traffic">信号（緑・黄・朱）</string>
+    <string name="where_work_machine">▸ Mac / Linux で操作します</string>
+    <string name="where_this_phone">▸ この端末で操作します</string>
 </resources>

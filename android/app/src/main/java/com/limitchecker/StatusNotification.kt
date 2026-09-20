@@ -62,6 +62,7 @@ object StatusNotification {
         val night = (context.resources.configuration.uiMode and
             Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
         val now = System.currentTimeMillis() / 1000
+        val scheme = Prefs.colorScheme(context)
 
         val claude = (result as? HubClient.Result.Ok)?.status?.service("claude_code")
         val outer = claude?.ring("outer")
@@ -109,12 +110,12 @@ object StatusNotification {
             .setOnlyAlertOnce(true)
             .setCategory(Notification.CATEGORY_STATUS)
             // アプリ名とアイコンに乗るアクセント色。逼迫時は朱色にして気づきやすくする
-            .setColor(accentColor(outer?.remaining, usable, night))
+            .setColor(accentColor(scheme, outer?.remaining, usable, night))
 
         if (usable) {
             // 折りたたみ時は右端にリングの絵。数字だけより状態が伝わる
             builder.setLargeIcon(
-                DonutRenderer.renderBadge(BADGE_PX, outer, middle, night, dead = false)
+                DonutRenderer.renderBadge(BADGE_PX, outer, middle, night, dead = false, scheme = scheme)
             )
             // 展開するとウィジェットと同じ絵が大きく出る
             builder.setStyle(
@@ -127,6 +128,8 @@ object StatusNotification {
                             nowEpoch = now,
                             night = night,
                             widthDp = 400,
+                            heightDp = 175,
+                            scheme = scheme,
                         )
                     )
                     .setBigContentTitle(title)
@@ -145,11 +148,13 @@ object StatusNotification {
         context.getSystemService(NotificationManager::class.java)?.cancel(NOTIFICATION_ID)
     }
 
-    /** ウィジェットの配色に合わせる。外側リングと同じ考え方（D12）。 */
-    private fun accentColor(remaining: Double?, usable: Boolean, night: Boolean): Int = when {
-        !usable || remaining == null -> if (night) Color.parseColor("#6E6A70") else Color.parseColor("#9E9A9F")
-        remaining < 0.20 -> if (night) Color.parseColor("#FF7043") else Color.parseColor("#D55E00")
-        else -> if (night) Color.parseColor("#56B4E9") else Color.parseColor("#0072B2")
+    /** ウィジェットと同じ配色に合わせる。外側リングと同じ考え方（D12）。 */
+    private fun accentColor(
+        scheme: ColorScheme, remaining: Double?, usable: Boolean, night: Boolean,
+    ): Int = when {
+        !usable || remaining == null ->
+            if (night) Color.parseColor("#6E6A70") else Color.parseColor("#9E9A9F")
+        else -> scheme.ringColor("outer", remaining, night)
     }
 
     private fun openApp(context: Context): PendingIntent = PendingIntent.getActivity(

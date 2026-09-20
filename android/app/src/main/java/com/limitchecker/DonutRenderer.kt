@@ -36,23 +36,11 @@ object DonutRenderer {
         val subText = if (night) Color.parseColor("#A8A2AB") else Color.parseColor("#5F5F63")
         val track = if (night) Color.parseColor("#3A383C") else Color.parseColor("#E4E1E6")
 
-        /** 外側（5時間枠）= 青 */
-        val outerHue = if (night) Color.parseColor("#56B4E9") else Color.parseColor("#0072B2")
-
-        /** 中央（週次枠）= オレンジ */
-        val middleHue = if (night) Color.parseColor("#E69F00") else Color.parseColor("#D68A00")
-
-        /** 逼迫時 = 朱色。青ともオレンジとも判別できる */
-        val critical = if (night) Color.parseColor("#FF7043") else Color.parseColor("#D55E00")
-
         val gray = if (night) Color.parseColor("#6E6A70") else Color.parseColor("#9E9A9F")
     }
 
-    /** これを下回ったら朱色にして線を太くする。 */
-    private const val CRITICAL = 0.20
-
-    private fun hueFor(palette: Palette, slot: String): Int =
-        if (slot == "outer") palette.outerHue else palette.middleHue
+    /** これを下回ったら線を太くする。色は [ColorScheme] が決める。 */
+    private const val CRITICAL = ColorScheme.CRITICAL
 
     /** この幅（dp）を下回ったらドーナツを1つだけ出す。2つ並べると小さくなりすぎるため。 */
     private const val TWO_COLUMN_MIN_DP = 190
@@ -67,7 +55,9 @@ object DonutRenderer {
         nowEpoch: Long,
         night: Boolean,
         widthDp: Int = TWO_COLUMN_MIN_DP,
+        heightDp: Int = 110,
         background: WidgetBackground = WidgetBackground.OPAQUE,
+        scheme: ColorScheme = ColorScheme.DEFAULT,
     ): Bitmap {
         val width = widthPx.coerceAtLeast(1)
         val height = heightPx.coerceAtLeast(1)
@@ -95,7 +85,10 @@ object DonutRenderer {
             is HubClient.Result.Failed ->
                 drawMessage(canvas, width, height, palette, result.reason, shadow)
             is HubClient.Result.Ok ->
-                drawServices(canvas, width, height, palette, result.status, nowEpoch, widthDp, shadow)
+                drawServices(
+                    canvas, width, height, palette, result.status, nowEpoch,
+                    widthDp, heightDp, shadow, scheme,
+                )
         }
         return bitmap
     }
@@ -127,30 +120,39 @@ object DonutRenderer {
         status: Status,
         nowEpoch: Long,
         widthDp: Int,
+        heightDp: Int,
         shadow: Boolean,
+        scheme: ColorScheme,
     ) {
-        // 狭いウィジェットに2つ押し込むと、どちらも読めない大きさになる。
-        // その場合は Claude Code だけを大きく出す。
-        val ids = if (widthDp < TWO_COLUMN_MIN_DP) {
-            listOf("claude_code")
-        } else {
-            listOf("claude_code", "codex")
-        }
-        // 1×1 まで縮められるので、狭いときは要素を減らして読める大きさを保つ
-        val compact = widthDp < COMPACT_MAX_DP
-        val columnWidth = width / ids.size.toFloat()
+        // 入る形に合わせて並べ方を決める（D25）。
+        //   横に広い   : 横並び2つ
+        //   縦に長い   : 縦積み2つ。どちらも同じ大きさになる
+        //   それ以外   : 1つだけ
+        val horizontal = widthDp >= TWO_COLUMN_MIN_DP
+        val vertical = !horizontal && heightDp >= widthDp * 1.6f
+        val count = if (horizontal || vertical) 2 else 1
+
+        val ids = if (count == 2) listOf("claude_code", "codex") else listOf("claude_code")
+        val cellWidth = if (horizontal) width / 2f else width.toFloat()
+        val cellHeight = if (vertical) height / 2f else height.toFloat()
+        // 1セルの幅が狭ければ要素を減らして読める大きさを保つ
+        val cellWidthDp = if (horizontal) widthDp / 2 else widthDp
+        val compact = cellWidthDp < COMPACT_MAX_DP || (vertical && heightDp / 2 < COMPACT_MAX_DP)
+
         ids.forEachIndexed { index, id ->
             drawService(
                 canvas = canvas,
-                left = columnWidth * index,
-                width = columnWidth,
-                height = height.toFloat(),
+                left = if (horizontal) cellWidth * index else 0f,
+                top = if (vertical) cellHeight * index else 0f,
+                width = cellWidth,
+                height = cellHeight,
                 palette = palette,
                 service = status.service(id),
                 fallbackLabel = if (id == "codex") "Codex" else "Claude Code",
                 nowEpoch = nowEpoch,
                 compact = compact,
                 shadow = shadow,
+                scheme = scheme,
             )
         }
     }
@@ -158,6 +160,7 @@ object DonutRenderer {
     private fun drawService(
         canvas: Canvas,
         left: Float,
+        top: Float,
         width: Float,
         height: Float,
         palette: Palette,
@@ -166,6 +169,7 @@ object DonutRenderer {
         nowEpoch: Long,
         compact: Boolean,
         shadow: Boolean,
+        scheme: ColorScheme,
     ) {
         val padding = width * (if (compact) 0.06f else 0.10f)
         // 省略形ではサービス名を出さない。その分リングを大きく取る。
@@ -174,12 +178,12 @@ object DonutRenderer {
         val diameter = minOf(available, height - padding * 2 - labelSize * 1.6f)
         if (diameter <= 0f) return
 
-        // 縦に広いウィジェットでは下半分が空いてしまうので、全体を縦中央に寄せる。
+        // 縦に余裕があるときは、中身を縦中央に寄せて空白を作らない。
         val contentHeight = diameter + labelSize * 1.6f
-        val top = ((height - contentHeight) / 2f).coerceAtLeast(padding)
+        val innerTop = top + ((height - contentHeight) / 2f).coerceAtLeast(padding)
 
         val centerX = left + width / 2f
-        val centerY = top + diameter / 2f
+        val centerY = innerTop + diameter / 2f
         val stroke = diameter * 0.095f
         val gap = stroke * 0.55f
 
@@ -193,8 +197,8 @@ object DonutRenderer {
         val outer = service?.ring("outer")
         val middle = service?.ring("middle")
 
-        drawRing(canvas, centerX, centerY, outerRadius, stroke, palette, outer, dead, alpha)
-        drawRing(canvas, centerX, centerY, middleRadius, stroke, palette, middle, dead, alpha)
+        drawRing(canvas, centerX, centerY, outerRadius, stroke, palette, outer, dead, alpha, scheme)
+        drawRing(canvas, centerX, centerY, middleRadius, stroke, palette, middle, dead, alpha, scheme)
 
         // 中心にはリセットまでの残り時間を置く。常に5時間枠（D8）。
         // 残量の数字は置かない。弧の長さが残量を表しているため（D13）。
@@ -238,7 +242,7 @@ object DonutRenderer {
         canvas.drawText(
             service?.label ?: fallbackLabel,
             centerX,
-            top + diameter + labelSize * 1.1f,
+            innerTop + diameter + labelSize * 1.1f,
             labelPaint,
         )
     }
@@ -253,6 +257,7 @@ object DonutRenderer {
         ring: Ring?,
         dead: Boolean,
         alpha: Int,
+        scheme: ColorScheme,
     ) {
         if (radius <= 0f) return
 
@@ -274,7 +279,7 @@ object DonutRenderer {
             style = Paint.Style.STROKE
             strokeWidth = width
             strokeCap = Paint.Cap.ROUND
-            color = if (isCritical) palette.critical else hueFor(palette, ring.slot)
+            color = scheme.ringColor(ring.slot, ring.remaining, palette.isNight)
             this.alpha = alpha
         }
         // 残量を12時方向から時計回りに描く。残量が減ると弧が短くなる。
@@ -455,6 +460,7 @@ object DonutRenderer {
         middle: Ring?,
         night: Boolean,
         dead: Boolean,
+        scheme: ColorScheme = ColorScheme.DEFAULT,
     ): Bitmap {
         val size = sizePx.coerceAtLeast(1)
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
@@ -466,8 +472,8 @@ object DonutRenderer {
         val outerRadius = center - stroke / 2f - size * 0.03f
         val middleRadius = outerRadius - stroke - gap
 
-        drawRing(canvas, center, center, outerRadius, stroke, palette, outer, dead, 255)
-        drawRing(canvas, center, center, middleRadius, stroke, palette, middle, dead, 255)
+        drawRing(canvas, center, center, outerRadius, stroke, palette, outer, dead, 255, scheme)
+        drawRing(canvas, center, center, middleRadius, stroke, palette, middle, dead, 255, scheme)
         return bitmap
     }
 

@@ -17,6 +17,7 @@ object Prefs {
     private const val KEY_NOTIFICATION = "notification_enabled"
     private const val KEY_STATUS_ICON = "status_icon_mode"
     private const val KEY_WIDGET_BG = "widget_background"
+    private const val KEY_SCHEME = "color_scheme"
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
@@ -50,6 +51,14 @@ object Prefs {
 
     fun setWidgetBackground(context: Context, background: WidgetBackground) {
         prefs(context).edit().putString(KEY_WIDGET_BG, background.key).apply()
+    }
+
+    /** リングの配色。 */
+    fun colorScheme(context: Context): ColorScheme =
+        ColorScheme.fromKey(prefs(context).getString(KEY_SCHEME, null))
+
+    fun setColorScheme(context: Context, scheme: ColorScheme) {
+        prefs(context).edit().putString(KEY_SCHEME, scheme.key).apply()
     }
 
     fun save(context: Context, url: String, token: String) {

@@ -32,7 +32,9 @@ object WidgetRenderer {
         result: HubClient.Result,
     ) {
         val (widthPx, heightPx) = sizeOf(context, manager, widgetId)
-        val widthDp = (widthPx / context.resources.displayMetrics.density).toInt()
+        val density = context.resources.displayMetrics.density
+        val widthDp = (widthPx / density).toInt()
+        val heightDp = (heightPx / density).toInt()
         val night = (context.resources.configuration.uiMode and
             Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
 
@@ -43,7 +45,9 @@ object WidgetRenderer {
             nowEpoch = System.currentTimeMillis() / 1000,
             night = night,
             widthDp = widthDp,
+            heightDp = heightDp,
             background = Prefs.widgetBackground(context),
+            scheme = Prefs.colorScheme(context),
         )
 
         val views = RemoteViews(context.packageName, R.layout.widget_limit)
