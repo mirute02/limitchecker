@@ -1,4 +1,4 @@
-#!/data/data/com.termux/files/usr/bin/sh
+#!/bin/sh
 # Android（Termux）で端末起動時に hub を立ち上げる。
 #
 # Termux:Boot アプリを入れたうえで:
@@ -10,5 +10,12 @@
 # バックグラウンドプロセスを止めることがある。
 
 termux-wake-lock
-cd "$HOME/src/limitchecker" || exit 1
+# リポジトリの場所を決め打ちしない。このスクリプトの位置から辿る。
+# ~/.termux/boot/ に置く場合は LIMITCHECKER_REPO で明示する。
+REPO=${LIMITCHECKER_REPO:-$(cd "$(dirname "$0")/.." 2>/dev/null && pwd)}
+if [ ! -f "$REPO/hub/server.py" ]; then
+    echo "hub/server.py が見つかりません。LIMITCHECKER_REPO を設定してください。" >&2
+    exit 1
+fi
+cd "$REPO" || exit 1
 exec python3 hub/server.py >/dev/null 2>&1
