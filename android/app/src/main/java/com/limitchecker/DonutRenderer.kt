@@ -48,6 +48,9 @@ object DonutRenderer {
     /** これを下回ったら省略形。サービス名を出さず、リングと時間だけにする。 */
     private const val COMPACT_MAX_DP = 112
 
+    /** 名前を出すならこの高さは要る。これ未満なら出さず、配置で埋める。 */
+    private const val MIN_LABEL_DP = 9f
+
     /** これ以上の大きさなら、ドーナツをやめて横棒にする。 */
     private const val BARS_MIN_WIDTH_DP = 220
     private const val BARS_MIN_HEIGHT_DP = 170
@@ -152,31 +155,66 @@ object DonutRenderer {
         val compact = cellWidthDp < COMPACT_MAX_DP || (vertical && heightDp / 2 < COMPACT_MAX_DP)
 
         if (vertical) {
-            // 各ドーナツを自分の半分の領域の中央に置くと、上下に使われない隙間が残る。
-            // 2つをひとまとまりとして配置し、余白を詰める。
-            val margin = minOf(width, height) * 0.03f
-            val gap = height * 0.03f
-            val diameter = minOf(
-                width - margin * 2,
-                (height - margin * 2 - gap) / 2f,
-            )
-            val groupTop = (height - (diameter * 2 + gap)) / 2f
-            ids.forEachIndexed { index, id ->
-                drawService(
-                    canvas = canvas,
-                    left = 0f,
-                    top = groupTop + (diameter + gap) * index,
-                    width = width.toFloat(),
-                    height = diameter,
-                    palette = palette,
-                    service = status.service(id),
-                    fallbackLabel = if (id == "codex") "Codex" else "Claude Code",
-                    nowEpoch = nowEpoch,
-                    compact = true,
-                    shadow = shadow,
-                    scheme = scheme,
-                    fixedDiameter = diameter,
-                )
+            // 縦積みではドーナツの大きさが幅で決まるため、縦が余る。
+            // 余りの扱いは2通り（D35）:
+            //   読める大きさの名前が入るなら → 名前に充てる。情報が増える
+            //   入らないなら              → 上下と中間に均等に配す。
+            //                              片寄った空きは事故に見えるが、
+            //                              等間隔なら意図した配置に見える
+            val density = if (widthDp > 0) width.toFloat() / widthDp else 1f
+            val minLabelPx = MIN_LABEL_DP * density
+
+            val margin = minOf(width, height) * 0.04f
+            val byWidth = width - margin * 2
+            val cellHeight = (height - margin * 2) / 2f
+            val baseDiameter = minOf(byWidth, cellHeight)
+
+            val leftover = cellHeight - baseDiameter
+            val labelSize = (leftover * 0.55f).coerceAtMost(baseDiameter * 0.22f)
+            val useLabel = labelSize >= minLabelPx
+
+            if (useLabel) {
+                val diameter = minOf(byWidth, cellHeight - labelSize * 1.5f)
+                val content = diameter + labelSize * 1.5f
+                val gap = ((height - content * 2) / 3f).coerceAtLeast(0f)
+                ids.forEachIndexed { index, id ->
+                    drawService(
+                        canvas = canvas,
+                        left = 0f,
+                        top = gap + (content + gap) * index,
+                        width = width.toFloat(),
+                        height = content,
+                        palette = palette,
+                        service = status.service(id),
+                        fallbackLabel = if (id == "codex") "Codex" else "Claude",
+                        nowEpoch = nowEpoch,
+                        compact = true,
+                        shadow = shadow,
+                        scheme = scheme,
+                        fixedDiameter = diameter,
+                        fixedLabelSize = labelSize,
+                    )
+                }
+            } else {
+                // 上・間・下を同じ間隔にする
+                val gap = ((height - baseDiameter * 2) / 3f).coerceAtLeast(0f)
+                ids.forEachIndexed { index, id ->
+                    drawService(
+                        canvas = canvas,
+                        left = 0f,
+                        top = gap + (baseDiameter + gap) * index,
+                        width = width.toFloat(),
+                        height = baseDiameter,
+                        palette = palette,
+                        service = status.service(id),
+                        fallbackLabel = if (id == "codex") "Codex" else "Claude",
+                        nowEpoch = nowEpoch,
+                        compact = true,
+                        shadow = shadow,
+                        scheme = scheme,
+                        fixedDiameter = baseDiameter,
+                    )
+                }
             }
             return
         }
@@ -214,6 +252,7 @@ object DonutRenderer {
         shadow: Boolean,
         scheme: ColorScheme,
         fixedDiameter: Float? = null,
+        fixedLabelSize: Float? = null,
     ) {
         // 余白は短いほうの辺で決める。幅だけで決めると、横に広くて背が低い形で
         // 余白が過大になり、ドーナツが極端に小さくなる。
@@ -227,12 +266,12 @@ object DonutRenderer {
         if (fullDiameter <= 0f) return
 
         // 省略形ではサービス名を出さない。その分リングを大きく取る。
-        var labelSize = if (compact) 0f else (shortSide * 0.12f)
+        var labelSize = fixedLabelSize ?: if (compact) 0f else (shortSide * 0.12f)
         var diameter = fixedDiameter ?: minOf(innerWidth, innerHeight - labelSize * 1.6f)
 
-        // ラベルのせいでグラフが目に見えて小さくなるなら、ラベルを捨てて
-        // グラフを優先する。どの形でも同じ大きさのグラフが出るようにするため（D28）。
-        if (labelSize > 0f && diameter < fullDiameter * 0.78f) {
+        // 呼び出し元が大きさを決めている場合は、その判断に従う。
+        // そうでないときだけ、ラベルでグラフが小さくなりすぎないか見る（D28）。
+        if (fixedDiameter == null && labelSize > 0f && diameter < fullDiameter * 0.78f) {
             labelSize = 0f
             diameter = fullDiameter
         }
@@ -240,7 +279,12 @@ object DonutRenderer {
 
         // 縦に余裕があるときは、中身を縦中央に寄せて空白を作らない。
         val contentHeight = diameter + labelSize * 1.6f
-        val innerTop = top + ((height - contentHeight) / 2f).coerceAtLeast(padding)
+        // 呼び出し元が高さを決めている場合は、その枠にぴったり収める。
+        val innerTop = if (fixedDiameter != null) {
+            top + ((height - contentHeight) / 2f).coerceAtLeast(0f)
+        } else {
+            top + ((height - contentHeight) / 2f).coerceAtLeast(padding)
+        }
 
         val centerX = left + width / 2f
         val centerY = innerTop + diameter / 2f
@@ -286,13 +330,15 @@ object DonutRenderer {
         }
         canvas.drawText(centerText, centerX, centerY + centerPaint.textSize * 0.35f, centerPaint)
 
-        // 省略形では補足も名前も出さない。入れても読めない大きさになる。
-        if (compact) return
+        // 補足（「後に回復」）は省略形では出さない。入れても読めない。
+        // 名前は labelSize があれば出す（縦積みで余りを名前に充てる場合）。
+        if (compact && labelSize <= 0f) return
 
-        if (!dead && centerText != "—") {
+        if (!compact && !dead && centerText != "—") {
             canvas.drawText("後に回復", centerX, centerY + centerPaint.textSize * 1.25f, captionPaint)
         }
 
+        if (labelSize <= 0f) return
         val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = palette.subText
             textAlign = Paint.Align.CENTER
@@ -364,6 +410,58 @@ object DonutRenderer {
      * 何を出すかは利用者が選ぶ（[StatusIconMode]）。24dp しかないため、
      * どのモードでも出す情報は1種類に絞る。
      */
+    /**
+     * 両サービスの5時間枠と週次枠、4つの値を1つのアイコンに収める。
+     *
+     * 24dp では角度より**高さ**のほうが正確に読める。電波強度計と同じ要領で、
+     * 4本の縦棒にする。2本ずつ間隔を空けてサービスを分ける。
+     *
+     *   左の2本 = Claude Code（5時間枠・週次枠）
+     *   右の2本 = Codex（5時間枠・週次枠）
+     *
+     * OS が単色に塗ってもアルファは残るので、薄い枠の上に濃い棒を重ねて
+     * 「満タンに対してどれだけ」が読める（D34）。
+     */
+    fun renderStatusBarBars(sizePx: Int, values: List<Double?>): Bitmap {
+        val size = sizePx.coerceAtLeast(1)
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+
+        val margin = size * 0.08f
+        val groupGap = size * 0.10f
+        val barGap = size * 0.045f
+        val usable = size - margin * 2
+        val barWidth = (usable - groupGap - barGap * 2) / 4f
+        val maxHeight = size - margin * 2
+        val radius = barWidth * 0.3f
+
+        val track = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            alpha = 70
+        }
+        val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+
+        var x = margin
+        values.forEachIndexed { index, value ->
+            // 枠は常に描く。描かないと「空」と「未取得」の区別がつかない。
+            canvas.drawRoundRect(
+                RectF(x, margin, x + barWidth, margin + maxHeight),
+                radius, radius, track,
+            )
+            if (value != null) {
+                val h = (maxHeight * value).toFloat().coerceAtLeast(barWidth * 0.5f)
+                canvas.drawRoundRect(
+                    RectF(x, margin + maxHeight - h, x + barWidth, margin + maxHeight),
+                    radius, radius, fill,
+                )
+            }
+            x += barWidth
+            // 2本目の後だけ広く空けて、サービスの区切りを示す
+            x += if (index == 1) groupGap else barGap
+        }
+        return bitmap
+    }
+
     fun renderStatusBarIcon(
         sizePx: Int,
         mode: StatusIconMode,

@@ -96,23 +96,45 @@ object StatusNotification {
             result is HubClient.Result.NotConfigured -> context.getString(R.string.notif_setup)
             result is HubClient.Result.Failed -> result.reason
             !usable -> context.getString(R.string.notif_stale)
+            // 「両方」のときは週次枠も本文に入れる。題名には5時間枠しか入らないため。
+            choice == ServiceChoice.BOTH && secondary != null -> context.getString(
+                R.string.notif_body_both,
+                Math.round((middle?.remaining ?: 0.0) * 100),
+                Math.round((secondary.ring("middle")?.remaining ?: 0.0) * 100),
+            )
             outer?.resetsAtEpoch != null ->
                 context.getString(R.string.notif_reset, countdown(outer.resetsAtEpoch - now))
             else -> ""
         }
 
-        val statusIcon = Icon.createWithBitmap(
+        val mode = Prefs.statusIconMode(context)
+        val statusBitmap = if (
+            choice == ServiceChoice.BOTH && mode == StatusIconMode.RINGS_BOTH
+        ) {
+            // 4つの値（両サービスの5時間枠と週次枠）を縦棒で出す。
+            // 24dp に同心円を2本重ねると潰れるため、高さで表す（D34）。
+            DonutRenderer.renderStatusBarBars(
+                STATUS_ICON_PX,
+                listOf(
+                    if (usable) outer?.remaining else null,
+                    if (usable) middle?.remaining else null,
+                    secondary?.ring("outer")?.remaining,
+                    secondary?.ring("middle")?.remaining,
+                ),
+            )
+        } else {
             DonutRenderer.renderStatusBarIcon(
                 sizePx = STATUS_ICON_PX,
-                mode = Prefs.statusIconMode(context),
-                // 「両方」のときは、左が Claude の5時間枠、右が Codex の5時間枠
+                mode = mode,
                 outer = if (usable) outer else null,
+                // 「両方」の他モードでは、右半分を Codex の5時間枠にする
                 middle = if (usable) {
                     if (choice == ServiceChoice.BOTH) secondaryOuter else middle
                 } else null,
                 nowEpoch = now,
             )
-        )
+        }
+        val statusIcon = Icon.createWithBitmap(statusBitmap)
 
         val builder = Notification.Builder(context, CHANNEL_ID)
             .setSmallIcon(statusIcon)

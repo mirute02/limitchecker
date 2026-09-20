@@ -41,8 +41,8 @@
     <string name="notification_note">ステータスバーにはドーナツの形で出ます。OS が小アイコンを単色で塗るため色は出ませんが、濃淡は残るので残量が読めます。通知を開くとリングの絵と数字が出ます。音は鳴りません。</string>
     <string name="notification_denied">通知が許可されていません。端末の設定から許可してください。</string>
     <string name="status_icon_label">ステータスバーに出すもの</string>
-    <string name="status_icon_note">時計や電池が並ぶ行に置けるのは小さなアイコン1つだけで、24dp ほどしかありません。2つの枠を出す場合は、同心円だと潰れるため円を左右に分けます。左半分が5時間枠、右半分が週次枠です。どちらも下から上へ伸びるので、使うほど上から減っていきます。濃いほうが残量です。詳しい値は通知を引き下ろせば見えます。</string>
-    <string name="mode_rings_both">ドーナツ（左＝5時間／右＝週次）</string>
+    <string name="status_icon_note">時計や電池が並ぶ行に置けるのは小さなアイコン1つだけで、24dp ほどしかありません。\n\n上で「Claude Code」か「Codex」を選んでいる場合、円を左右に分けて左半分が5時間枠、右半分が週次枠になります。どちらも下から上へ伸び、使うほど上から減ります。\n\n「両方」を選んでいる場合は4つの値を出す必要があるため、縦棒4本になります。左の2本が Claude Code、右の2本が Codex で、それぞれ5時間枠と週次枠です。この大きさでは角度より高さのほうが正確に読めます。\n\nいずれも濃いほうが残量です。</string>
+    <string name="mode_rings_both">グラフ（5時間と週次の両方）</string>
     <string name="mode_ring_5h">ドーナツ（5時間のみ）</string>
     <string name="mode_pct_5h">数字（5時間の残量）</string>
     <string name="mode_reset_5h">数字（5時間の回復まで）</string>
@@ -72,4 +72,5 @@
     <string name="service_codex">Codex</string>
     <string name="service_both">両方</string>
     <string name="notif_title_both">Claude %1$d%% ・ Codex %2$d%%</string>
+    <string name="notif_body_both">週次は Claude %1$d%% ・ Codex %2$d%%</string>
 </resources>
