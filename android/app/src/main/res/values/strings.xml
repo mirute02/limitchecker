@@ -64,4 +64,17 @@ URL とトークンを入れて「保存して接続を確認」を押します�
     <string name="copy">コピー</string>
     <string name="copied">コピーしました</string>
     <string name="add_widget">このウィジェットを追加</string>
+    <string name="channel_status">残量の常設表示</string>
+    <string name="channel_status_description">通知センターに残量を出しておくための通知です。音は鳴りません。</string>
+    <string name="notif_title">Claude 5時間 %1$d%% ・ 週 %2$d%%</string>
+    <string name="notif_title_unavailable">Claude 残量を取得できません</string>
+    <string name="notif_reset">%1$s 後に回復</string>
+    <string name="notif_stale">値が古くなっています</string>
+    <string name="notif_setup">タップして hub を設定してください</string>
+
+    <string name="notification_label">通知センターへの常設</string>
+    <string name="notification_enable">通知センターに常設する</string>
+    <string name="notification_disable">常設をやめる</string>
+    <string name="notification_note">ステータスバーには残量の数字だけが出ます。OS が小アイコンを単色で塗るため、色分けは通知を開いた先で見えます。音は鳴りません。</string>
+    <string name="notification_denied">通知が許可されていません。端末の設定から許可してください。</string>
 </resources>

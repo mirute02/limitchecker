@@ -56,6 +56,9 @@ object DonutRenderer {
     /** この幅（dp）を下回ったらドーナツを1つだけ出す。2つ並べると小さくなりすぎるため。 */
     private const val TWO_COLUMN_MIN_DP = 190
 
+    /** これを下回ったら省略形。サービス名を出さず、リングと時間だけにする。 */
+    private const val COMPACT_MAX_DP = 112
+
     fun render(
         widthPx: Int,
         heightPx: Int,
@@ -115,6 +118,8 @@ object DonutRenderer {
         } else {
             listOf("claude_code", "codex")
         }
+        // 1×1 まで縮められるので、狭いときは要素を減らして読める大きさを保つ
+        val compact = widthDp < COMPACT_MAX_DP
         val columnWidth = width / ids.size.toFloat()
         ids.forEachIndexed { index, id ->
             drawService(
@@ -126,6 +131,7 @@ object DonutRenderer {
                 service = status.service(id),
                 fallbackLabel = if (id == "codex") "Codex" else "Claude Code",
                 nowEpoch = nowEpoch,
+                compact = compact,
             )
         }
     }
@@ -139,9 +145,11 @@ object DonutRenderer {
         service: Service?,
         fallbackLabel: String,
         nowEpoch: Long,
+        compact: Boolean,
     ) {
-        val padding = width * 0.10f
-        val labelSize = (width * 0.11f).coerceAtMost(height * 0.12f)
+        val padding = width * (if (compact) 0.06f else 0.10f)
+        // 省略形ではサービス名を出さない。その分リングを大きく取る。
+        val labelSize = if (compact) 0f else (width * 0.11f).coerceAtMost(height * 0.12f)
         val available = width - padding * 2
         val diameter = minOf(available, height - padding * 2 - labelSize * 1.6f)
         if (diameter <= 0f) return
@@ -174,7 +182,7 @@ object DonutRenderer {
             color = if (dead) palette.gray else palette.text
             this.alpha = alpha
             textAlign = Paint.Align.CENTER
-            textSize = diameter * 0.19f
+            textSize = diameter * (if (compact) 0.26f else 0.19f)
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         }
         val captionPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -191,6 +199,9 @@ object DonutRenderer {
             else -> "—"
         }
         canvas.drawText(centerText, centerX, centerY + centerPaint.textSize * 0.35f, centerPaint)
+
+        // 省略形では補足も名前も出さない。入れても読めない大きさになる。
+        if (compact) return
 
         if (!dead && centerText != "—") {
             canvas.drawText("後に回復", centerX, centerY + centerPaint.textSize * 1.25f, captionPaint)

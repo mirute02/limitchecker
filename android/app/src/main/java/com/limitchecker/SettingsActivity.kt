@@ -6,6 +6,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.Typeface
@@ -42,6 +43,7 @@ class SettingsActivity : Activity() {
     private lateinit var statusText: TextView
     private lateinit var preview: ImageView
     private lateinit var instructions: LinearLayout
+    private lateinit var notificationButton: Button
     /** ウィジェット配置から呼ばれた場合の ID。通常起動では INVALID。 */
     private var appWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
 
@@ -132,6 +134,15 @@ class SettingsActivity : Activity() {
             preview,
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(140)),
         )
+
+        // ---- 通知センターへの常設 ----
+        root.addView(label(getString(R.string.notification_label)))
+        notificationButton = Button(this).apply {
+            setOnClickListener { toggleNotification() }
+        }
+        root.addView(notificationButton, wide())
+        root.addView(note(getString(R.string.notification_note)))
+        applyNotificationLabel()
 
         // ---- hub の手順 ----
         instructions = LinearLayout(this).apply {
@@ -237,6 +248,63 @@ class SettingsActivity : Activity() {
             Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId),
         )
         finish()
+    }
+
+    // ------------------------------------------------------------------
+    // 通知センターへの常設
+    // ------------------------------------------------------------------
+
+    private fun applyNotificationLabel() {
+        notificationButton.text = getString(
+            if (Prefs.notificationEnabled(this)) R.string.notification_disable
+            else R.string.notification_enable
+        )
+    }
+
+    private fun toggleNotification() {
+        if (Prefs.notificationEnabled(this)) {
+            Prefs.setNotificationEnabled(this, false)
+            StatusNotification.cancel(this)
+            RefreshWorker.syncSchedule(this)
+            applyNotificationLabel()
+            return
+        }
+
+        // Android 13 以降は通知に実行時の許可が要る。本アプリで唯一の許可ダイアログ。
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(
+                arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
+                REQUEST_NOTIFICATIONS,
+            )
+            return
+        }
+        enableNotification()
+    }
+
+    private fun enableNotification() {
+        Prefs.setNotificationEnabled(this, true)
+        StatusNotification.ensureChannel(this)
+        RefreshWorker.syncSchedule(this)
+        // すぐ出す。次の定期実行まで15分待たせない。
+        RefreshWorker.refreshNow(this, force = true)
+        applyNotificationLabel()
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != REQUEST_NOTIFICATIONS) return
+        if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            enableNotification()
+        } else {
+            statusText.text = getString(R.string.notification_denied)
+        }
     }
 
     private fun renderPreview(result: HubClient.Result) {
@@ -376,5 +444,6 @@ class SettingsActivity : Activity() {
 
     companion object {
         private const val DEFAULT_URL = "http://127.0.0.1:8787"
+        private const val REQUEST_NOTIFICATIONS = 1
     }
 }

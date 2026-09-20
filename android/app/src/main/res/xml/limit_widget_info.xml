@@ -1,11 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- updatePeriodMillis は 0。更新は WorkManager が 15 分間隔で行う（D11）。
-     システム側の 30 分更新と二重に起こさないため、ここでは止めておく。 -->
+     システム側の 30 分更新と二重に起こさないため、ここでは止めておく。
+
+     1×1 まで縮められるようにする。描画側が幅に応じて内容を減らす（D14/D17）。 -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
-    android:minWidth="250dp"
-    android:minHeight="110dp"
-    android:targetCellWidth="4"
-    android:targetCellHeight="2"
+    android:minWidth="57dp"
+    android:minHeight="57dp"
+    android:minResizeWidth="57dp"
+    android:minResizeHeight="57dp"
+    android:targetCellWidth="2"
+    android:targetCellHeight="1"
     android:updatePeriodMillis="0"
     android:initialLayout="@layout/widget_limit"
     android:resizeMode="horizontal|vertical"

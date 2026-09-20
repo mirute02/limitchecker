@@ -14,6 +14,7 @@ import android.content.Context
 object Prefs {
     internal const val FILE = "limitchecker"
     private const val KEY_URL = "hub_url"
+    private const val KEY_NOTIFICATION = "notification_enabled"
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
@@ -24,6 +25,14 @@ object Prefs {
 
     fun isConfigured(context: Context): Boolean =
         hubUrl(context).isNotEmpty() && token(context).isNotEmpty()
+
+    /** 通知センターに常設するか。 */
+    fun notificationEnabled(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_NOTIFICATION, false)
+
+    fun setNotificationEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_NOTIFICATION, enabled).apply()
+    }
 
     fun save(context: Context, url: String, token: String) {
         prefs(context).edit()

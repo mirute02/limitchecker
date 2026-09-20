@@ -37,6 +37,7 @@ class RefreshWorker(context: Context, params: WorkerParameters) : Worker(context
 
         val result = HubClient.fetch(context)
         WidgetRenderer.updateAll(context, result)
+        StatusNotification.update(context, result)
 
         return when (result) {
             is HubClient.Result.Failed -> Result.retry()
@@ -55,7 +56,18 @@ class RefreshWorker(context: Context, params: WorkerParameters) : Worker(context
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
 
-        /** ウィジェットが最初に置かれたときに定期実行を始める。 */
+        /**
+         * ウィジェットか常設通知のどちらかが有効なら定期実行し、
+         * 両方なくなったら止める。表示するものがないのに動かさない。
+         */
+        fun syncSchedule(context: Context) {
+            if (hasWidgets(context) || Prefs.notificationEnabled(context)) {
+                schedulePeriodic(context)
+            } else {
+                cancelPeriodic(context)
+            }
+        }
+
         fun schedulePeriodic(context: Context) {
             val request = PeriodicWorkRequestBuilder<RefreshWorker>(15, TimeUnit.MINUTES)
                 .setConstraints(constraints)

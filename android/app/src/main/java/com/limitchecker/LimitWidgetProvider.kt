@@ -15,11 +15,12 @@ import android.os.Bundle
 class LimitWidgetProvider : AppWidgetProvider() {
 
     override fun onEnabled(context: Context) {
-        RefreshWorker.schedulePeriodic(context)
+        RefreshWorker.syncSchedule(context)
     }
 
     override fun onDisabled(context: Context) {
-        RefreshWorker.cancelPeriodic(context)
+        // 常設通知だけ残っている場合もあるので、一律に止めない
+        RefreshWorker.syncSchedule(context)
     }
 
     override fun onUpdate(
