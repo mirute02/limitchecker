@@ -126,16 +126,25 @@ def write_state(report: dict) -> None:
 
 
 def maybe_post(report: dict, env: dict) -> None:
-    """間引いたうえでバックグラウンドに送信を投げる。statusLine は待たない。"""
-    hub = env.get("LIMITCHECKER_HUB_URL")
-    token = env.get("LIMITCHECKER_TOKEN")
-    if not hub or not token:
+    """間引いたうえでバックグラウンドに送信を投げる。statusLine は待たない。
+
+    **送信先はここで決めない。** send.py が .env の BIND/PORT から導出するため、
+    LIMITCHECKER_HUB_URL が無くても送れる。ここで URL の有無を判定していたせいで、
+    HUB_URL を書いていない環境では一度も送信されなかった（D42）。
+
+    BIND=tailscale の解決には `tailscale ip -4` の実行が要る。それをここで
+    行うと statusLine を最長10秒塞ぐため、送信先の決定は子プロセスに任せる。
+    """
+    if not env.get("LIMITCHECKER_TOKEN"):
         return
 
     stamp = STATE_DIR / "last-post"
     now = time.time()
     try:
-        if now - stamp.stat().st_mtime < POST_INTERVAL_SEC:
+        age = now - stamp.stat().st_mtime
+        # 未来の時刻は無視する。時計の巻き戻しやバックアップからの復元で
+        # mtime が未来になると、差が負のまま永久に送信されなくなる。
+        if 0 <= age < POST_INTERVAL_SEC:
             return
     except OSError:
         pass

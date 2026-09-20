@@ -68,8 +68,22 @@ LEGACY_PROBE_ID = "connectivity-probe"
 
 def load_store() -> dict:
     try:
-        data = json.loads(STORE_PATH.read_text())
-    except (OSError, ValueError):
+        raw = STORE_PATH.read_text()
+    except OSError:
+        # ファイルが無いだけ。初回はこれが正常。
+        return {}
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        # 読めたが壊れている。黙って捨てると他マシンの分まで失われるため、
+        # 退避してから空で続ける（D42）。
+        backup = STORE_PATH.with_name(f"hub.json.corrupt-{int(time.time())}")
+        try:
+            STORE_PATH.replace(backup)
+            print(f"保存ファイルが壊れていました。{backup.name} に退避しました。",
+                  file=sys.stderr)
+        except OSError:
+            pass
         return {}
     if not isinstance(data, dict):
         return {}
@@ -374,10 +388,18 @@ class Handler(BaseHTTPRequestHandler):
             self._send(400, {"error": "bad_request"})
             return
 
-        with _lock:
-            store = load_store()
-            store[f"{report['service']}:{report['machine_id']}"] = report
-            save_store(store)
+        try:
+            with _lock:
+                store = load_store()
+                store[f"{report['service']}:{report['machine_id']}"] = report
+                save_store(store)
+        except OSError:
+            # 保存できないまま接続を切ると、送信側は理由を知れない。
+            # 状態ディレクトリの権限やマウントの問題はここに出る（D42）。
+            print("保存に失敗しました。状態ディレクトリを確認してください: "
+                  f"{STATE_DIR}", file=sys.stderr)
+            self._send(500, {"error": "store_unavailable"})
+            return
         self._send(200, {"ok": True})
 
     def _handle_ping(self):
