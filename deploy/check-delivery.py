@@ -40,10 +40,11 @@ def main() -> int:
 
     print(f"  送信先: {url}")
 
+    # /ping は検証だけして保存しない。偽の残量で本物を上書きしないため（D41）。
     probe = {
         "service": "claude_code",
         "account": env.get("LIMITCHECKER_CLAUDE_ACCOUNT", "default"),
-        "machine_id": PROBE_ID,
+        "machine_id": env.get("LIMITCHECKER_MACHINE_ID", "local"),
         "machine_label": "probe",
         "rings": [
             {"slot": "outer", "label": "5h", "remaining": 1.0,
@@ -51,32 +52,35 @@ def main() -> int:
         ],
         "updated_at": int(time.time()),
     }
-    subprocess.run(
-        [sys.executable, str(repo / "agent" / "send.py")],
-        input=json.dumps(probe).encode(),
-        capture_output=True, timeout=30,
-    )
-
     request = urllib.request.Request(
-        url + "/status", headers={"Authorization": f"Bearer {token}"}
+        url + "/ping",
+        data=json.dumps(probe).encode(),
+        method="POST",
+        headers={"Authorization": f"Bearer {token}",
+                 "Content-Type": "application/json"},
     )
     try:
         with urllib.request.urlopen(request, timeout=10) as response:
-            data = json.loads(response.read().decode())
+            result = json.loads(response.read().decode())
     except urllib.error.HTTPError as e:
-        print(f"  hub が {e.code} を返しました。トークンが合っているか確認してください。")
+        if e.code in (401, 403):
+            print("  トークンが合っていません。hub 側の .env と同じ値か確認してください。")
+        elif e.code == 404:
+            print("  hub が古いままです。hub を置いたマシンで更新してください。")
+            print("    git pull && ./deploy/install-hub.sh")
+        else:
+            print(f"  hub が {e.code} を返しました。")
         return 0
     except Exception:
         print("  hub に接続できません。hub が動いているか確認してください。")
         print("    ./deploy/install-hub.sh --status")
         return 0
 
-    ids = [m["id"] for m in data.get("machines", [])]
-    if PROBE_ID in ids:
-        print("  OK: 送信が届きました。")
+    if result.get("accepted"):
+        print("  OK: 送信が届き、内容も受理されました。")
+        print("  （確認のための通信で、残量の値は書き換えていません）")
     else:
-        print("  hub には繋がりましたが、送ったものが記録されていません。")
-        print(f"  hub が見ているマシン: {ids or 'なし'}")
+        print("  hub には届きましたが、内容が受理されませんでした。")
     return 0
 
 

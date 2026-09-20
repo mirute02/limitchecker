@@ -62,12 +62,27 @@ def load_env() -> dict:
     return env
 
 
+# 以前の疎通確認が書き込んでいた偽のマシン。読み込み時に取り除く（D41）。
+LEGACY_PROBE_ID = "connectivity-probe"
+
+
 def load_store() -> dict:
     try:
         data = json.loads(STORE_PATH.read_text())
-        return data if isinstance(data, dict) else {}
     except (OSError, ValueError):
         return {}
+    if not isinstance(data, dict):
+        return {}
+    stale = [k for k, v in data.items()
+             if isinstance(v, dict) and v.get("machine_id") == LEGACY_PROBE_ID]
+    for key in stale:
+        del data[key]
+    if stale:
+        try:
+            save_store(data)
+        except OSError:
+            pass
+    return data
 
 
 def save_store(store: dict) -> None:
@@ -328,6 +343,12 @@ class Handler(BaseHTTPRequestHandler):
         if not self._authorized():
             self._send(401, {"error": "unauthorized"})
             return
+        # 疎通確認。検証は /ingest と同じだが**保存しない**。
+        # 保存すると偽の残量が本物を上書きしてしまう（D41）。
+        if path == "/ping":
+            self._handle_ping()
+            return
+
         if path != "/ingest":
             self._send(404, {"error": "not_found"})
             return
@@ -358,6 +379,23 @@ class Handler(BaseHTTPRequestHandler):
             store[f"{report['service']}:{report['machine_id']}"] = report
             save_store(store)
         self._send(200, {"ok": True})
+
+    def _handle_ping(self):
+        """届くか・認証が通るか・内容が受理されるかだけを確かめる。保存はしない。"""
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            self._send(400, {"error": "bad_request"})
+            return
+        if length <= 0 or length > MAX_BODY_BYTES:
+            self._send(413, {"error": "payload_too_large"})
+            return
+        try:
+            payload = json.loads(self.rfile.read(length))
+        except ValueError:
+            self._send(400, {"error": "bad_request"})
+            return
+        self._send(200, {"ok": True, "accepted": clean_report(payload) is not None})
 
     def _handle_pair(self):
         """接続コードとトークンを交換する。"""
