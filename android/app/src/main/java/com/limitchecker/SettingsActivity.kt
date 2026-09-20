@@ -393,52 +393,32 @@ class SettingsActivity : Activity() {
     // ------------------------------------------------------------------
 
     /**
-     * 手順を見出し・本文・コマンドに分けて組み立てる。
-     * コマンドには「コピー」を付ける。端末で長押し選択させるのは現実的でない。
-     *
-     * 書式は行頭の記号で決まる。
-     *   "# "  見出し
-     *   "> "  コマンド（連続行は1ブロックにまとめる）
-     *   それ以外は本文
+     * 手順を組み立てる。区切り記号の解析はしない。
+     * [SetupSteps] が型で分けて持っているため、コマンドには必ず
+     * 個別のコピーボタンが付く（docs/decisions.md D22）。
      */
     private fun buildSteps() {
         instructions.removeAllViews()
-
         val codeBackground =
             if (isNight()) Color.parseColor("#2A282C") else Color.parseColor("#F1EFF3")
-        val lines = getString(R.string.hub_setup_steps).split("\n")
 
-        var index = 0
-        while (index < lines.size) {
-            val line = lines[index]
-            when {
-                line.startsWith("# ") -> {
-                    instructions.addView(TextView(this).apply {
-                        text = line.removePrefix("# ")
-                        typeface = Typeface.DEFAULT_BOLD
-                        setPadding(0, dp(18), 0, dp(4))
-                    }, wide())
-                    index++
-                }
-                line.startsWith("> ") -> {
-                    // まとめず1コマンドずつ出す。どのボタンが何をコピーするかを
-                    // 迷わせないため。
-                    instructions.addView(
-                        codeBlock(line.removePrefix("> "), codeBackground),
-                        wide(),
-                    )
-                    index++
-                }
-                line.isBlank() -> index++
-                else -> {
-                    instructions.addView(TextView(this).apply {
-                        text = line
-                        textSize = 13f
-                        setPadding(0, dp(3), 0, dp(3))
-                        setLineSpacing(0f, 1.25f)
-                    }, wide())
-                    index++
-                }
+        SetupSteps.items.forEach { item ->
+            when (item) {
+                is SetupSteps.Item.Head -> instructions.addView(TextView(this).apply {
+                    text = item.text
+                    typeface = Typeface.DEFAULT_BOLD
+                    setPadding(0, dp(18), 0, dp(4))
+                }, wide())
+
+                is SetupSteps.Item.Body -> instructions.addView(TextView(this).apply {
+                    text = item.text
+                    textSize = 13f
+                    setPadding(0, dp(4), 0, dp(4))
+                    setLineSpacing(0f, 1.25f)
+                }, wide())
+
+                is SetupSteps.Item.Command ->
+                    instructions.addView(codeBlock(item.text, codeBackground), wide())
             }
         }
     }
