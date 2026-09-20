@@ -157,8 +157,25 @@ status_codex() {
 
 # ------------------------------------------------------------------
 
+# ------------------------------------------------------------------
+# 送信経路を実際に試す。
+# agent は送信先が分からないと黙って終わるため、動いているように見えて
+# hub に何も届かないことがある（D40）。
+# ------------------------------------------------------------------
+check_delivery() {
+    echo
+    echo "-- hub への送信 --"
+
+    if [ ! -f "$REPO/.env" ]; then
+        echo "  .env がありません。先に ./deploy/install-hub.sh を実行してください。"
+        return 0
+    fi
+
+    "$PYTHON" "$SCRIPT_DIR/check-delivery.py" "$REPO"
+}
+
 case "$ACTION" in
-    --status)    status_claude; status_codex ;;
+    --status)    status_claude; status_codex; check_delivery ;;
     --uninstall) uninstall_claude; uninstall_codex ;;
     --claude)    install_claude ;;
     --codex)     install_codex ;;

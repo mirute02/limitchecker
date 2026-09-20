@@ -8,6 +8,8 @@ updated_at から判断してグレー表示にする（docs/decisions.md D1）�
 
 import json
 import os
+import re
+import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -29,15 +31,53 @@ def load_env() -> dict:
             env[key.strip()] = value.strip()
     except OSError:
         pass
-    for key in ("LIMITCHECKER_TOKEN", "LIMITCHECKER_HUB_URL"):
+    for key in ("LIMITCHECKER_TOKEN", "LIMITCHECKER_HUB_URL",
+                "LIMITCHECKER_BIND", "LIMITCHECKER_PORT"):
         if os.environ.get(key):
             env[key] = os.environ[key]
     return env
 
 
+def hub_url(env: dict) -> str | None:
+    """送信先を決める。
+
+    hub と同じマシンでは `.env` を共有しているので、待ち受け設定から導出できる。
+    LIMITCHECKER_HUB_URL を書き忘れても動くようにするため（D40）。
+
+    注意: BIND が Tailscale のアドレスなら、hub は 127.0.0.1 で待っていない。
+    同じマシンからでもそのアドレスへ送る必要がある。
+    """
+    explicit = env.get("LIMITCHECKER_HUB_URL")
+    if explicit:
+        return explicit.rstrip("/")
+
+    bind = (env.get("LIMITCHECKER_BIND") or "").strip()
+    port = (env.get("LIMITCHECKER_PORT") or "8787").strip()
+    if not bind:
+        return None
+    if bind.lower() == "tailscale":
+        # hub 側と同じ引き方をする
+        try:
+            out = subprocess.run(
+                ["tailscale", "ip", "-4"], capture_output=True, text=True, timeout=10
+            )
+            for line in out.stdout.splitlines():
+                candidate = line.strip()
+                if re.match(
+                    r"^100\.(6[4-9]|[7-9][0-9]|1[0-1][0-9]|12[0-7])\."
+                    r"[0-9]{1,3}\.[0-9]{1,3}$",
+                    candidate,
+                ):
+                    return f"http://{candidate}:{port}"
+        except (OSError, subprocess.SubprocessError):
+            return None
+        return None
+    return f"http://{bind}:{port}"
+
+
 def main() -> int:
     env = load_env()
-    hub = env.get("LIMITCHECKER_HUB_URL")
+    hub = hub_url(env)
     token = env.get("LIMITCHECKER_TOKEN")
     if not hub or not token:
         return 0
@@ -49,7 +89,7 @@ def main() -> int:
         return 0
 
     request = urllib.request.Request(
-        hub.rstrip("/") + "/ingest",
+        hub + "/ingest",
         data=body,
         method="POST",
         headers={
