@@ -674,17 +674,18 @@ object DonutRenderer {
         val pad = minOf(width, height) * 0.055f
         val innerWidth = width - pad * 2
 
-        // 1サービスあたり: 見出し1行 + リング2本
+        // 1サービスあたり: 見出し1行 + リング2本。
+        // サービスの区切りは、見出しの**前**に空ける。後ろに空けると
+        // 見出しが下のグループから切り離されて見える（D44）。
         val rowsPerService = 3
-        val totalRows = ids.size * rowsPerService
-        // サービス間の区切りぶんを見込む
-        val unit = (height - pad * 2) / (totalRows + (ids.size - 1) * 0.4f)
+        val gapUnits = 0.5f
+        val totalUnits = ids.size * rowsPerService + (ids.size - 1) * gapUnits
+        val unit = (height - pad * 2) / totalUnits
 
-        val titleSize = unit * 0.52f
-        val labelSize = unit * 0.42f
-        val barHeight = unit * 0.36f
+        val titleSize = unit * 0.60f
+        val labelSize = unit * 0.44f
+        val barHeight = unit * 0.34f
 
-        // 数値は右端に揃える。桁が動いても行が崩れない。
         val valuePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             textAlign = Paint.Align.RIGHT
             textSize = labelSize
@@ -703,34 +704,36 @@ object DonutRenderer {
             applyShadow(shadow, palette.isNight, textSize)
         }
 
-        // 一番長い値の幅を測って右側の領域を決める
-        val valueWidth = valuePaint.measureText("100% 000日")
-        val labelWidth = labelPaint.measureText("5時間枠") * 1.25f
-        val barWidth = innerWidth - labelWidth - valueWidth - pad
+        // 一番長い値の幅を測って右側を確保する。桁が動いても行が崩れない。
+        val valueWidth = valuePaint.measureText("100%  00/00 00:00")
+        val labelWidth = labelPaint.measureText("5時間枠") * 1.18f
+        val barWidth = (innerWidth - labelWidth - valueWidth - pad * 0.5f)
+            .coerceAtLeast(innerWidth * 0.2f)
 
-        var y = pad + titleSize
+        var y = pad
 
-        ids.forEach { id ->
+        ids.forEachIndexed { index, id ->
+            if (index > 0) y += unit * gapUnits
+
             val service = status.service(id)
             val fresh = Freshness.of(service?.updatedAtEpoch, nowEpoch)
             val dead = service == null || !service.available || fresh == Freshness.EXPIRED
             val alpha = if (fresh == Freshness.STALE && !dead) 150 else 255
 
-            canvas.drawText(service?.label ?: id, pad, y, titlePaint)
-            y += unit * 0.45f
+            // 1行ぶんの帯の中で、縦中央に文字を置く
+            canvas.drawText(service?.label ?: id, pad, y + unit * 0.5f + titleSize * 0.36f, titlePaint)
+            y += unit
 
             listOf("outer" to "5時間枠", "middle" to "週次枠").forEach { (slot, name) ->
                 val ring = service?.ring(slot)
-                y += unit * 0.9f
+                val center = y + unit * 0.5f
 
-                canvas.drawText(name, pad, y + barHeight * 0.35f, labelPaint)
+                canvas.drawText(name, pad, center + labelSize * 0.36f, labelPaint)
 
                 val barLeft = pad + labelWidth
                 val radius = barHeight / 2f
-
-                // 枠全体
                 canvas.drawRoundRect(
-                    RectF(barLeft, y - barHeight * 0.5f, barLeft + barWidth, y + barHeight * 0.5f),
+                    RectF(barLeft, center - barHeight * 0.5f, barLeft + barWidth, center + barHeight * 0.5f),
                     radius, radius,
                     Paint(Paint.ANTI_ALIAS_FLAG).apply { color = palette.track },
                 )
@@ -738,7 +741,7 @@ object DonutRenderer {
                 if (!dead && ring != null) {
                     val filled = (barWidth * ring.remaining).toFloat().coerceAtLeast(barHeight)
                     canvas.drawRoundRect(
-                        RectF(barLeft, y - barHeight * 0.5f, barLeft + filled, y + barHeight * 0.5f),
+                        RectF(barLeft, center - barHeight * 0.5f, barLeft + filled, center + barHeight * 0.5f),
                         radius, radius,
                         Paint(Paint.ANTI_ALIAS_FLAG).apply {
                             color = scheme.ringColor(slot, ring.remaining, palette.isNight)
@@ -758,10 +761,10 @@ object DonutRenderer {
                 }
                 valuePaint.color = if (dead) palette.gray else palette.text
                 valuePaint.alpha = alpha
-                canvas.drawText(text, (width - pad), y + barHeight * 0.35f, valuePaint)
-            }
+                canvas.drawText(text, (width - pad), center + labelSize * 0.36f, valuePaint)
 
-            y += unit * 0.9f
+                y += unit
+            }
         }
     }
 
