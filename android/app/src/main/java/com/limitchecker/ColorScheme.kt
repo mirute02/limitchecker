@@ -5,7 +5,7 @@ import android.graphics.Color
 /**
  * リングの配色。
  *
- * 既定の3つは、色相で**どのリングか**を示し、残量の多寡は弧の長さで表す（D12）。
+ * 既定は色相で**どのリングか**を示し、残量の多寡は弧の長さで表す（D12）。
  * 値は Okabe-Ito の色覚バリアフリー配色から採っており、
  * P型・D型・T型のいずれでも2つのリングを区別できる。
  *
@@ -18,12 +18,6 @@ enum class ColorScheme(val key: String, val labelRes: Int) {
 
     /** 青とオレンジ。もっとも判別しやすい組み合わせ。 */
     BLUE_ORANGE("blue_orange", R.string.scheme_blue_orange),
-
-    /** 青と青緑。落ち着いた印象。 */
-    BLUE_GREEN("blue_green", R.string.scheme_blue_green),
-
-    /** 青と赤紫。 */
-    BLUE_PURPLE("blue_purple", R.string.scheme_blue_purple),
 
     /** 濃淡のみ。色を使わない。 */
     MONO("mono", R.string.scheme_mono),
@@ -46,10 +40,6 @@ enum class ColorScheme(val key: String, val labelRes: Int) {
         return when (this) {
             BLUE_ORANGE ->
                 if (isOuter) blue(night) else if (night) ORANGE_DARK else ORANGE_LIGHT
-            BLUE_GREEN ->
-                if (isOuter) blue(night) else if (night) GREEN_DARK else GREEN_LIGHT
-            BLUE_PURPLE ->
-                if (isOuter) blue(night) else if (night) PURPLE_DARK else PURPLE_LIGHT
             MONO ->
                 if (isOuter) monoStrong(night) else monoWeak(night)
             TRAFFIC -> blue(night) // 到達しない
@@ -90,8 +80,6 @@ enum class ColorScheme(val key: String, val labelRes: Int) {
         private val ORANGE_DARK = Color.parseColor("#E69F00")
         private val GREEN_LIGHT = Color.parseColor("#008765")
         private val GREEN_DARK = Color.parseColor("#3FC79A")
-        private val PURPLE_LIGHT = Color.parseColor("#A6568C")
-        private val PURPLE_DARK = Color.parseColor("#CC79A7")
         private val AMBER_LIGHT = Color.parseColor("#B8860B")
         private val AMBER_DARK = Color.parseColor("#F0C000")
         private val VERMILLION_LIGHT = Color.parseColor("#D55E00")

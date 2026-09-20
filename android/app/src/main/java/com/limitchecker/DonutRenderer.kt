@@ -128,11 +128,16 @@ object DonutRenderer {
         //   横に広い   : 横並び2つ
         //   縦に長い   : 縦積み2つ。どちらも同じ大きさになる
         //   それ以外   : 1つだけ
-        val horizontal = widthDp >= TWO_COLUMN_MIN_DP
-        val vertical = !horizontal && heightDp >= widthDp * 1.6f
+        // 一度も報告がないサービスは出さない。常にグレーのリングが並んでいると
+        // 故障しているように見える（D28）。
+        val known = listOf("claude_code", "codex").filter { status.service(it)?.configured == true }
+        val available = known.ifEmpty { listOf("claude_code") }
+
+        val horizontal = available.size >= 2 && widthDp >= TWO_COLUMN_MIN_DP
+        val vertical = available.size >= 2 && !horizontal && heightDp >= widthDp * 1.6f
         val count = if (horizontal || vertical) 2 else 1
 
-        val ids = if (count == 2) listOf("claude_code", "codex") else listOf("claude_code")
+        val ids = available.take(count)
         val cellWidth = if (horizontal) width / 2f else width.toFloat()
         val cellHeight = if (vertical) height / 2f else height.toFloat()
         // 1セルの幅が狭ければ要素を減らして読める大きさを保つ
@@ -333,10 +338,7 @@ object DonutRenderer {
         val center = size / 2f
 
         // 取得できていないことは、どのモードでも同じ形で示す
-        val unavailable = when (mode) {
-            StatusIconMode.RING_WEEK, StatusIconMode.PCT_WEEK -> middle == null
-            else -> outer == null
-        }
+        val unavailable = outer == null
         if (unavailable) {
             drawIconText(canvas, size, "?")
             return bitmap
@@ -349,16 +351,15 @@ object DonutRenderer {
                 // 小さくても両方読める。左が5時間枠、右が週次枠。
                 drawSplitRing(canvas, size, outer!!.remaining, middle?.remaining)
             }
-            StatusIconMode.RING_5H, StatusIconMode.RING_WEEK -> {
+            StatusIconMode.RING_5H -> {
                 // 1本だけなら太く描ける。形が読み取りやすくなる。
-                val ring = if (mode == StatusIconMode.RING_5H) outer!! else middle!!
+                val ring = outer!!
                 val stroke = size * 0.26f
                 val radius = center - stroke / 2f - size * 0.05f
                 drawIconRing(canvas, center, radius, stroke, ring.remaining)
             }
-            StatusIconMode.PCT_5H, StatusIconMode.PCT_WEEK -> {
-                val ring = if (mode == StatusIconMode.PCT_5H) outer!! else middle!!
-                val percent = Math.round(ring.remaining * 100).coerceIn(0, 100)
+            StatusIconMode.PCT_5H -> {
+                val percent = Math.round(outer!!.remaining * 100).coerceIn(0, 100)
                 // 3桁は潰れるので 100 は 99 に丸める
                 drawIconText(canvas, size, if (percent >= 100) "99" else percent.toString())
             }

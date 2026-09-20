@@ -21,6 +21,8 @@ data class Service(
     val id: String,
     val label: String,
     val available: Boolean,
+    /** 一度でも報告があったか。false なら未設定なので表示しない。 */
+    val configured: Boolean,
     val updatedAtEpoch: Long?,
     val rings: List<Ring>,
 ) {
@@ -75,6 +77,7 @@ data class Status(
                         id = obj.optString("id"),
                         label = obj.optString("label", obj.optString("id")),
                         available = obj.optBoolean("available", false),
+                        configured = obj.optBoolean("configured", false),
                         updatedAtEpoch = parseTime(obj.optString("updated_at", null)),
                         rings = rings,
                     )

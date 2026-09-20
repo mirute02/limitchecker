@@ -171,12 +171,16 @@ def build_status(store: dict) -> dict:
     for service_id in ("claude_code", "codex"):
         picked = [r for (s, _), r in freshest.items() if s == service_id]
         if not picked:
+            # 一度も報告がないサービスは「未設定」。設定済みで取得に失敗した状態
+            # （available: false）と区別する。未設定のものを常にグレーで出すと
+            # 故障しているように見えるため、描画側で省く（D28）。
             services.append(
                 {
                     "id": service_id,
                     "label": SERVICE_LABELS[service_id],
                     "available": False,
-                    "error": "usage_unavailable",
+                    "configured": False,
+                    "error": "not_configured",
                 }
             )
             continue
@@ -186,6 +190,7 @@ def build_status(store: dict) -> dict:
                 "id": service_id,
                 "label": SERVICE_LABELS[service_id],
                 "available": True,
+                "configured": True,
                 "account": best["account"],
                 "updated_at": iso(best["updated_at"]),
                 "rings": [

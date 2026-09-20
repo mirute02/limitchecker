@@ -14,14 +14,8 @@ enum class StatusIconMode(val key: String, val labelRes: Int) {
     /** 5時間枠だけを太いリングで。1本なので形が読み取りやすい。 */
     RING_5H("ring_5h", R.string.mode_ring_5h),
 
-    /** 週次枠だけを太いリングで。 */
-    RING_WEEK("ring_week", R.string.mode_ring_week),
-
     /** 5時間枠の残量を数字で。正確さ重視。 */
     PCT_5H("pct_5h", R.string.mode_pct_5h),
-
-    /** 週次枠の残量を数字で。 */
-    PCT_WEEK("pct_week", R.string.mode_pct_week),
 
     /** 5時間枠が回復するまでの時間。「あとどれだけ待てば使えるか」を見たいとき。 */
     RESET_5H("reset_5h", R.string.mode_reset_5h);
