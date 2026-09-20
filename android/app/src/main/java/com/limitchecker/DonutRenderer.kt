@@ -171,11 +171,27 @@ object DonutRenderer {
         shadow: Boolean,
         scheme: ColorScheme,
     ) {
-        val padding = width * (if (compact) 0.06f else 0.10f)
+        // 余白は短いほうの辺で決める。幅だけで決めると、横に広くて背が低い形で
+        // 余白が過大になり、ドーナツが極端に小さくなる。
+        val shortSide = minOf(width, height)
+        val padding = shortSide * (if (compact) 0.06f else 0.10f)
+
+        val innerWidth = width - padding * 2
+        val innerHeight = height - padding * 2
+        // ラベルを置かない場合に取れる大きさ。これが基準になる。
+        val fullDiameter = minOf(innerWidth, innerHeight)
+        if (fullDiameter <= 0f) return
+
         // 省略形ではサービス名を出さない。その分リングを大きく取る。
-        val labelSize = if (compact) 0f else (width * 0.11f).coerceAtMost(height * 0.12f)
-        val available = width - padding * 2
-        val diameter = minOf(available, height - padding * 2 - labelSize * 1.6f)
+        var labelSize = if (compact) 0f else (shortSide * 0.12f)
+        var diameter = minOf(innerWidth, innerHeight - labelSize * 1.6f)
+
+        // ラベルのせいでグラフが目に見えて小さくなるなら、ラベルを捨てて
+        // グラフを優先する。どの形でも同じ大きさのグラフが出るようにするため（D28）。
+        if (labelSize > 0f && diameter < fullDiameter * 0.78f) {
+            labelSize = 0f
+            diameter = fullDiameter
+        }
         if (diameter <= 0f) return
 
         // 縦に余裕があるときは、中身を縦中央に寄せて空白を作らない。

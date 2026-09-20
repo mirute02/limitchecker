@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- hub への通信。どちらも通常権限で、実行時ダイアログは出ない（D10）。 -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -39,5 +40,11 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/limit_widget_info" />
         </receiver>
+        <!-- WorkManager が追加する診断用レシーバ。adb から実行状況を
+             ログに出すためのもので、本アプリでは使わない。DUMP 権限で
+             守られてはいるが、使わないものは公開面から外す。 -->
+        <receiver
+            android:name="androidx.work.impl.diagnostics.DiagnosticsReceiver"
+            tools:node="remove" />
     </application>
 </manifest>
