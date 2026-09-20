@@ -9,6 +9,9 @@
 
 set -eu
 
+# 一時ファイルにトークンを書くため、作成時点から他人に読ませない
+umask 077
+
 # --- 場所を特定する。macOS には realpath がないので使わない ---
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$SCRIPT_DIR/.." && pwd)

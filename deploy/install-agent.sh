@@ -34,7 +34,9 @@ import json, os, sys, pathlib
 
 settings_path = pathlib.Path(sys.argv[1])
 repo, python = sys.argv[2], sys.argv[3]
-command = f"{python} {repo}/agent/statusline.py"
+# 空白を含むパスでも Claude Code が起動できるよう引用する
+command = f'"{python}" "{repo}/agent/statusline.py"' if " " in f"{python}{repo}" \
+    else f"{python} {repo}/agent/statusline.py"
 
 settings_path.parent.mkdir(parents=True, exist_ok=True)
 data = {}
@@ -69,6 +71,12 @@ if existing:
 data["statusLine"] = {"type": "command", "command": command}
 tmp = settings_path.with_suffix(".json.tmp")
 tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+# 元の権限を引き継ぐ。settings.json の env に API キーを置いている人がいるため、
+# umask 次第で 600 から 644 に緩んでしまうのを防ぐ（D43）。
+try:
+    tmp.chmod(settings_path.stat().st_mode & 0o7777)
+except OSError:
+    tmp.chmod(0o600)
 tmp.replace(settings_path)
 print(f"  Claude Code: {settings_path} に statusLine を追加しました")
 PY
@@ -90,6 +98,10 @@ if isinstance(sl, dict) and repo in str(sl.get("command", "")):
     del data["statusLine"]
     tmp = settings_path.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+    try:
+        tmp.chmod(settings_path.stat().st_mode & 0o7777)
+    except OSError:
+        tmp.chmod(0o600)
     tmp.replace(settings_path)
     print("  Claude Code: statusLine を外しました")
 else:
@@ -99,14 +111,19 @@ PY
 
 status_claude() {
     if [ -f "$CLAUDE_SETTINGS" ]; then
-        "$PYTHON" -c "
-import json,sys
-try: d=json.load(open('$CLAUDE_SETTINGS'))
-except Exception: print('  Claude Code: settings.json を読めません'); raise SystemExit
-sl=d.get('statusLine')
-cmd=sl.get('command','') if isinstance(sl,dict) else ''
-print('  Claude Code: 設定済み' if '$REPO' in cmd else ('  Claude Code: 別の statusLine が設定されています' if cmd else '  Claude Code: 未設定'))
-"
+        # パスを python のソースに埋め込まない。引数で渡す。
+        "$PYTHON" -c '
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+except Exception:
+    print("  Claude Code: settings.json を読めません"); raise SystemExit
+sl = d.get("statusLine")
+cmd = sl.get("command", "") if isinstance(sl, dict) else ""
+print("  Claude Code: 設定済み" if sys.argv[2] in cmd
+      else ("  Claude Code: 別の statusLine が設定されています" if cmd
+            else "  Claude Code: 未設定"))
+' "$CLAUDE_SETTINGS" "$REPO"
     else
         echo "  Claude Code: settings.json がありません"
     fi
@@ -116,7 +133,9 @@ print('  Claude Code: 設定済み' if '$REPO' in cmd else ('  Claude Code: 別�
 # Codex: 定期実行を登録する
 # ------------------------------------------------------------------
 codex_line() {
-    printf '*/10 * * * * cd %s && %s agent/codex.py >/dev/null 2>&1 %s\n' "$REPO" "$PYTHON" "$CRON_TAG"
+    # パスに空白が入っても壊れないよう引用する
+    printf "*/10 * * * * cd '%s' && '%s' agent/codex.py >/dev/null 2>&1 %s\n" \
+        "$REPO" "$PYTHON" "$CRON_TAG"
 }
 
 install_codex() {

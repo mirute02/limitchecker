@@ -65,6 +65,7 @@ object DonutRenderer {
         heightDp: Int = 110,
         background: WidgetBackground = WidgetBackground.OPAQUE,
         scheme: ColorScheme = ColorScheme.DEFAULT,
+        absoluteTime: Boolean = false,
     ): Bitmap {
         val width = widthPx.coerceAtLeast(1)
         val height = heightPx.coerceAtLeast(1)
@@ -94,7 +95,7 @@ object DonutRenderer {
             is HubClient.Result.Ok ->
                 drawServices(
                     canvas, width, height, palette, result.status, nowEpoch,
-                    widthDp, heightDp, shadow, scheme,
+                    widthDp, heightDp, shadow, scheme, absoluteTime,
                 )
         }
         return bitmap
@@ -130,6 +131,7 @@ object DonutRenderer {
         heightDp: Int,
         shadow: Boolean,
         scheme: ColorScheme,
+        absoluteTime: Boolean,
     ) {
         // 入る形に合わせて並べ方を決める（D25）。
         //   横に広い   : 横並び2つ
@@ -142,7 +144,8 @@ object DonutRenderer {
 
         // 十分な面積があるなら、ドーナツより横棒のほうが情報量が多く読みやすい（D30）
         if (widthDp >= BARS_MIN_WIDTH_DP && heightDp >= BARS_MIN_HEIGHT_DP) {
-            drawBars(canvas, width, height, palette, status, available, nowEpoch, shadow, scheme)
+            drawBars(canvas, width, height, palette, status, available, nowEpoch,
+                shadow, scheme, absoluteTime)
             return
         }
 
@@ -191,6 +194,7 @@ object DonutRenderer {
                         compact = true,
                         shadow = shadow,
                         scheme = scheme,
+                        absoluteTime = absoluteTime,
                         fixedDiameter = diameter,
                         fixedLabelSize = labelSize,
                     )
@@ -212,6 +216,7 @@ object DonutRenderer {
                         compact = true,
                         shadow = shadow,
                         scheme = scheme,
+                        absoluteTime = absoluteTime,
                         fixedDiameter = baseDiameter,
                     )
                 }
@@ -234,6 +239,7 @@ object DonutRenderer {
                 compact = compact,
                 shadow = shadow,
                 scheme = scheme,
+                absoluteTime = absoluteTime,
             )
         }
     }
@@ -251,6 +257,7 @@ object DonutRenderer {
         compact: Boolean,
         shadow: Boolean,
         scheme: ColorScheme,
+        absoluteTime: Boolean = false,
         fixedDiameter: Float? = null,
         fixedLabelSize: Float? = null,
     ) {
@@ -325,7 +332,9 @@ object DonutRenderer {
         val centerText = when {
             service == null || !service.available -> "取得不可"
             freshness == Freshness.EXPIRED -> "未更新"
-            outer?.resetsAtEpoch != null -> formatCountdown(outer.resetsAtEpoch - nowEpoch)
+            outer?.resetsAtEpoch != null ->
+                if (absoluteTime) formatClock(outer.resetsAtEpoch)
+                else formatCountdown(outer.resetsAtEpoch - nowEpoch)
             else -> "—"
         }
         canvas.drawText(centerText, centerX, centerY + centerPaint.textSize * 0.35f, centerPaint)
@@ -335,7 +344,10 @@ object DonutRenderer {
         if (compact && labelSize <= 0f) return
 
         if (!compact && !dead && centerText != "—") {
-            canvas.drawText("後に回復", centerX, centerY + centerPaint.textSize * 1.25f, captionPaint)
+            canvas.drawText(
+                if (absoluteTime) "に回復" else "後に回復",
+                centerX, centerY + centerPaint.textSize * 1.25f, captionPaint,
+            )
         }
 
         if (labelSize <= 0f) return
@@ -657,6 +669,7 @@ object DonutRenderer {
         nowEpoch: Long,
         shadow: Boolean,
         scheme: ColorScheme,
+        absoluteTime: Boolean,
     ) {
         val pad = minOf(width, height) * 0.055f
         val innerWidth = width - pad * 2
@@ -736,8 +749,11 @@ object DonutRenderer {
 
                 val text = when {
                     dead || ring == null -> "—"
-                    ring.resetsAtEpoch != null ->
-                        "${Math.round(ring.remaining * 100)}%  ${formatCountdown(ring.resetsAtEpoch - nowEpoch)}"
+                    ring.resetsAtEpoch != null -> {
+                        val when_ = if (absoluteTime) formatClockWithDay(ring.resetsAtEpoch, nowEpoch)
+                        else formatCountdown(ring.resetsAtEpoch - nowEpoch)
+                        "${Math.round(ring.remaining * 100)}%  $when_"
+                    }
                     else -> "${Math.round(ring.remaining * 100)}%"
                 }
                 valuePaint.color = if (dead) palette.gray else palette.text
@@ -747,6 +763,31 @@ object DonutRenderer {
 
             y += unit * 0.9f
         }
+    }
+
+    /** 何時に回復するかを24時間表記で。 */
+    private fun formatClock(epochSeconds: Long): String {
+        val c = java.util.Calendar.getInstance()
+        c.timeInMillis = epochSeconds * 1000
+        return "%02d:%02d".format(
+            c.get(java.util.Calendar.HOUR_OF_DAY), c.get(java.util.Calendar.MINUTE),
+        )
+    }
+
+    /** 当日なら時刻だけ、別の日なら日付を添える。棒グラフは週次枠も出すため。 */
+    private fun formatClockWithDay(epochSeconds: Long, nowEpoch: Long): String {
+        val target = java.util.Calendar.getInstance().apply { timeInMillis = epochSeconds * 1000 }
+        val now = java.util.Calendar.getInstance().apply { timeInMillis = nowEpoch * 1000 }
+        val sameDay = target.get(java.util.Calendar.YEAR) == now.get(java.util.Calendar.YEAR) &&
+            target.get(java.util.Calendar.DAY_OF_YEAR) == now.get(java.util.Calendar.DAY_OF_YEAR)
+        val clock = "%02d:%02d".format(
+            target.get(java.util.Calendar.HOUR_OF_DAY), target.get(java.util.Calendar.MINUTE),
+        )
+        return if (sameDay) clock
+        else "%d/%d %s".format(
+            target.get(java.util.Calendar.MONTH) + 1,
+            target.get(java.util.Calendar.DAY_OF_MONTH), clock,
+        )
     }
 
     /** 1日未満は "H:MM"、それ以上は "N日"。 */

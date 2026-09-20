@@ -18,5 +18,12 @@
     <true/>
     <key>KeepAlive</key>
     <true/>
+    <!-- launchd の PATH は最小限で、tailscale が入っていない。
+         LIMITCHECKER_BIND=tailscale のとき解決できず再起動ループになるため補う。 -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/opt/homebrew/bin:/Applications/Tailscale.app/Contents/MacOS:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
 </dict>
 </plist>

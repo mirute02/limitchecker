@@ -19,6 +19,7 @@ object Prefs {
     private const val KEY_WIDGET_BG = "widget_background"
     private const val KEY_SCHEME = "color_scheme"
     private const val KEY_SERVICE = "service_choice"
+    private const val KEY_ABSOLUTE_TIME = "absolute_time"
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
@@ -68,6 +69,17 @@ object Prefs {
 
     fun setServiceChoice(context: Context, choice: ServiceChoice) {
         prefs(context).edit().putString(KEY_SERVICE, choice.key).apply()
+    }
+
+    /** リセット時刻を「何時に」で出すか。false なら「あと何時間」。 */
+    fun absoluteTime(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_ABSOLUTE_TIME, false)
+
+    /** タップで切り替える。切り替え後の値を返す。 */
+    fun toggleAbsoluteTime(context: Context): Boolean {
+        val next = !absoluteTime(context)
+        prefs(context).edit().putBoolean(KEY_ABSOLUTE_TIME, next).apply()
+        return next
     }
 
     fun save(context: Context, url: String, token: String) {

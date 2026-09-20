@@ -21,8 +21,11 @@ ProtectHome=read-only
 ProtectKernelTunables=true
 ProtectControlGroups=true
 RestrictSUIDSGID=true
-# 書き込むのは自分の状態ディレクトリだけ
-ReadWritePaths=%h/.local/state/limitchecker
+# 書き込むのは自分の状態ディレクトリだけ。
+# 先頭の - は「無ければ無視」。初回起動時にまだ無くても失敗させない。
+ReadWritePaths=-%h/.local/state/limitchecker
+# 無ければ作る
+ExecStartPre=/bin/mkdir -p %h/.local/state/limitchecker
 
 [Install]
 WantedBy=default.target

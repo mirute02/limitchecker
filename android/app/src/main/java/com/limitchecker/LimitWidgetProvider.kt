@@ -44,13 +44,21 @@ class LimitWidgetProvider : AppWidgetProvider() {
 
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
-        if (intent.action == ACTION_REFRESH) {
-            // タップされたときは画面が点いているので必ず取りに行く
-            RefreshWorker.refreshNow(context, force = true)
+        when (intent.action) {
+            ACTION_TAP -> {
+                // 「あと何時間」と「何時に回復」を切り替える。
+                // 切り替えだけだと古い値のまま見えるので、同時に取りに行く。
+                Prefs.toggleAbsoluteTime(context)
+                RefreshWorker.refreshNow(context, force = true)
+            }
+            ACTION_REFRESH -> RefreshWorker.refreshNow(context, force = true)
         }
     }
 
     companion object {
         const val ACTION_REFRESH = "com.limitchecker.action.REFRESH"
+
+        /** ウィジェットのタップ。表示形式を切り替えて、あわせて更新する。 */
+        const val ACTION_TAP = "com.limitchecker.action.TAP"
     }
 }

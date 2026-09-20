@@ -73,4 +73,5 @@
     <string name="service_both">両方</string>
     <string name="notif_title_both">Claude %1$d%% ・ Codex %2$d%%</string>
     <string name="notif_body_both">週次は Claude %1$d%% ・ Codex %2$d%%</string>
+    <string name="tap_note">ウィジェットをタップすると、「あと何時間」と「何時に回復するか（24時間表記）」が切り替わります。同時に最新の値を取りに行きます。</string>
 </resources>

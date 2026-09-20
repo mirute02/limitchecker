@@ -166,6 +166,8 @@ class SettingsActivity : Activity() {
         root.addView(label(getString(R.string.bg_label)))
         root.addView(backgroundChooser(), wide())
 
+        root.addView(note(getString(R.string.tap_note)))
+
         root.addView(label(getString(R.string.preview_label)))
         preview = ImageView(this).apply { adjustViewBounds = true }
         root.addView(
@@ -516,6 +518,7 @@ class SettingsActivity : Activity() {
                 heightDp = 140,
                 background = Prefs.widgetBackground(this),
                 scheme = Prefs.colorScheme(this),
+                absoluteTime = Prefs.absoluteTime(this),
             )
         )
     }

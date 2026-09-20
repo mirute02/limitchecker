@@ -17,8 +17,10 @@ cron / systemd timer / launchd から定期的に実行する。
 
 import json
 import os
+import signal
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -78,43 +80,78 @@ def fetch_rate_limits(codex_bin: str) -> dict | None:
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             text=True,
+            # 自分をリーダーとする新しいプロセスグループで起動する。
+            # こうしないと、ラッパー越しに起動した場合に孫プロセスが残る。
+            start_new_session=True,
         )
     except (OSError, ValueError):
         return None
 
+    # 読み取りを別スレッドに逃がす。readline() はブロックするので、
+    # 同じスレッドで締切を見ても評価されない。応答しない app-server を
+    # 相手にすると、cron が10分ごとに起動する子プロセスが溜まる（D43）。
+    result: list = []
+
+    def reader() -> None:
+        try:
+            for line in proc.stdout:
+                try:
+                    message = json.loads(line)
+                except ValueError:
+                    continue
+                if message.get("id") != 2:
+                    continue
+                if "error" not in message and isinstance(message.get("result"), dict):
+                    result.append(message["result"])
+                return
+        except (OSError, ValueError):
+            pass
+
+    thread = threading.Thread(target=reader, daemon=True)
     try:
         proc.stdin.write(requests)
         proc.stdin.flush()
-
-        deadline = time.time() + TIMEOUT_SEC
-        while time.time() < deadline:
-            line = proc.stdout.readline()
-            if not line:
-                break
-            try:
-                message = json.loads(line)
-            except ValueError:
-                continue
-            if message.get("id") != 2:
-                continue
-            if "error" in message:
-                return None
-            result = message.get("result")
-            return result if isinstance(result, dict) else None
-        return None
     except OSError:
-        return None
-    finally:
-        # 応答を得たら用済み。残しておくとプロセスが溜まる。
+        pass
+
+    # **stdin は閉じない。** 閉じると app-server が応答前に終了する。
+    # 最初にこの経路を調べたときに判明した挙動で、書き直しで一度見失った。
+    thread.start()
+    thread.join(timeout=TIMEOUT_SEC)
+
+    try:
+        proc.stdin.close()
+    except OSError:
+        pass
+
+    # 応答を得ても得なくても、子プロセスは必ず落とす。
+    # ラッパー経由だと孫が残るため、プロセスグループごと落とす。
+    def stop(sig: int) -> None:
         try:
-            proc.stdin.close()
+            os.killpg(os.getpgid(proc.pid), sig)
         except OSError:
-            pass
-        proc.terminate()
+            try:
+                proc.send_signal(sig)
+            except OSError:
+                pass
+
+    try:
+        stop(signal.SIGTERM)
         try:
             proc.wait(timeout=5)
         except subprocess.TimeoutExpired:
-            proc.kill()
+            stop(signal.SIGKILL)
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                pass
+    except OSError:
+        pass
+
+    # stdout は閉じない。読み取りスレッドがバッファのロックを持ったままなので、
+    # 別スレッドから close するとデッドロックする（実測で確認）。
+    # プロセス終了時に解放されるので閉じる必要もない。
+    return result[0] if result else None
 
 
 def extract_rings(result: dict) -> list:

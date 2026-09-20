@@ -48,6 +48,7 @@ object WidgetRenderer {
             heightDp = heightDp,
             background = Prefs.widgetBackground(context),
             scheme = Prefs.colorScheme(context),
+            absoluteTime = Prefs.absoluteTime(context),
         )
 
         val views = RemoteViews(context.packageName, R.layout.widget_limit)
@@ -74,7 +75,7 @@ object WidgetRenderer {
                 context,
                 1,
                 Intent(context, LimitWidgetProvider::class.java)
-                    .setAction(LimitWidgetProvider.ACTION_REFRESH),
+                    .setAction(LimitWidgetProvider.ACTION_TAP),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             )
         }

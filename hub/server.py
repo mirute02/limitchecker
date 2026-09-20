@@ -39,6 +39,10 @@ MIN_TOKEN_LEN = 16
 # 接続コードは短いので総当たりが効く。試行回数で必ず打ち切る。
 MAX_PAIR_ATTEMPTS = 5
 
+# 試行回数はファイルだけに頼らない。書き込めない状況で上限が無効化されるのを防ぐ。
+# プロセス内にも数えておき、どちらかが上限に達したら打ち切る（D43）。
+_pair_attempts = 0
+
 SERVICE_LABELS = {"claude_code": "Claude Code", "codex": "Codex"}
 
 _lock = threading.Lock()
@@ -270,8 +274,18 @@ def consume_pairing(code: str) -> bool:
     """接続コードを検証する。成功しても失敗しても、使い切ったら記録を消す。
 
     コード自体は保存していない。ハッシュを定数時間で比較する。
+
+    試行回数は**ファイルとメモリの両方**で数える。ファイルへの書き戻しが
+    失敗したときに上限が効かなくなるのを防ぐため（D43）。
     """
-    if not isinstance(code, str) or not code.isdigit() or not 4 <= len(code) <= 12:
+    global _pair_attempts
+
+    # isdigit() はアラビア数字以外の Unicode 数字も通す。形を厳密に限る。
+    if not isinstance(code, str) or not re.fullmatch(r"[0-9]{4,12}", code):
+        return False
+
+    if _pair_attempts >= MAX_PAIR_ATTEMPTS:
+        PAIRING_PATH.unlink(missing_ok=True)
         return False
     try:
         record = json.loads(PAIRING_PATH.read_text())
@@ -286,6 +300,10 @@ def consume_pairing(code: str) -> bool:
         return False
 
     attempts = record.get("attempts", 0)
+    # 新しいコードが発行されていればメモリ内の回数も戻す。
+    # ファイル側が 0 なのはコードが作り直された印。
+    if attempts == 0:
+        _pair_attempts = 0
     if not isinstance(attempts, int) or attempts >= MAX_PAIR_ATTEMPTS:
         PAIRING_PATH.unlink(missing_ok=True)
         return False
@@ -294,16 +312,21 @@ def consume_pairing(code: str) -> bool:
     actual = hashlib.sha256(code.encode("utf-8")).hexdigest()
     if not isinstance(expected, str) or not hmac.compare_digest(expected, actual):
         # 間違いも回数に数える。数えないと無制限に試せる。
+        _pair_attempts += 1
         record["attempts"] = attempts + 1
         try:
             PAIRING_PATH.write_text(json.dumps(record))
         except OSError:
-            pass
+            # 書けないなら記録を消して打ち切る。書き込みの成否に
+            # 上限の有効性を依存させない（フェイルクローズ）。
+            PAIRING_PATH.unlink(missing_ok=True)
+            return False
         if record["attempts"] >= MAX_PAIR_ATTEMPTS:
             PAIRING_PATH.unlink(missing_ok=True)
         return False
 
     # 成功。1回限りなので消す。
+    _pair_attempts = 0
     PAIRING_PATH.unlink(missing_ok=True)
     return True
 
@@ -312,6 +335,10 @@ class Handler(BaseHTTPRequestHandler):
     server_version = "limitchecker"
     sys_version = ""
     token = ""
+
+    # 接続を開いたまま放置されると、スレッドがクライアントの切断まで残る。
+    # tailnet 内の任意のノードがメモリを圧迫できてしまうため期限を切る（D43）。
+    timeout = 30
 
     def log_message(self, fmt, *args):
         """既定のログはリクエスト行をそのまま出す。パスとヘッダを載せないよう差し替える。"""
