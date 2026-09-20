@@ -12,6 +12,7 @@
   - エラー応答に内部パスやスタックトレースを含めない
 """
 
+import hashlib
 import hmac
 import json
 import os
@@ -25,6 +26,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 STATE_DIR = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")) / "limitchecker"
 STORE_PATH = STATE_DIR / "hub.json"
+PAIRING_PATH = STATE_DIR / "pairing.json"
 
 # machine_id / account に許す形。ログやファイル名に載る値なので、
 # パストラバーサルとログ汚染を防ぐために絞る。
@@ -32,6 +34,9 @@ ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 MAX_BODY_BYTES = 64 * 1024
 MIN_TOKEN_LEN = 16
+
+# 接続コードは短いので総当たりが効く。試行回数で必ず打ち切る。
+MAX_PAIR_ATTEMPTS = 5
 
 SERVICE_LABELS = {"claude_code": "Claude Code", "codex": "Codex"}
 
@@ -231,6 +236,48 @@ def build_status(store: dict) -> dict:
     }
 
 
+def consume_pairing(code: str) -> bool:
+    """接続コードを検証する。成功しても失敗しても、使い切ったら記録を消す。
+
+    コード自体は保存していない。ハッシュを定数時間で比較する。
+    """
+    if not isinstance(code, str) or not code.isdigit() or not 4 <= len(code) <= 12:
+        return False
+    try:
+        record = json.loads(PAIRING_PATH.read_text())
+    except (OSError, ValueError):
+        return False
+    if not isinstance(record, dict):
+        return False
+
+    expires_at = record.get("expires_at")
+    if not isinstance(expires_at, (int, float)) or time.time() > expires_at:
+        PAIRING_PATH.unlink(missing_ok=True)
+        return False
+
+    attempts = record.get("attempts", 0)
+    if not isinstance(attempts, int) or attempts >= MAX_PAIR_ATTEMPTS:
+        PAIRING_PATH.unlink(missing_ok=True)
+        return False
+
+    expected = record.get("code_hash")
+    actual = hashlib.sha256(code.encode("utf-8")).hexdigest()
+    if not isinstance(expected, str) or not hmac.compare_digest(expected, actual):
+        # 間違いも回数に数える。数えないと無制限に試せる。
+        record["attempts"] = attempts + 1
+        try:
+            PAIRING_PATH.write_text(json.dumps(record))
+        except OSError:
+            pass
+        if record["attempts"] >= MAX_PAIR_ATTEMPTS:
+            PAIRING_PATH.unlink(missing_ok=True)
+        return False
+
+    # 成功。1回限りなので消す。
+    PAIRING_PATH.unlink(missing_ok=True)
+    return True
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "limitchecker"
     sys_version = ""
@@ -269,10 +316,18 @@ class Handler(BaseHTTPRequestHandler):
         self._send(200, status)
 
     def do_POST(self):
+        path = self.path.split("?")[0]
+
+        # /pair だけは認証なしで受ける。トークンを渡すための入口なので、
+        # 認証を要求したら意味がない。代わりに接続コードで守る。
+        if path == "/pair":
+            self._handle_pair()
+            return
+
         if not self._authorized():
             self._send(401, {"error": "unauthorized"})
             return
-        if self.path.split("?")[0] != "/ingest":
+        if path != "/ingest":
             self._send(404, {"error": "not_found"})
             return
 
@@ -302,6 +357,34 @@ class Handler(BaseHTTPRequestHandler):
             store[f"{report['service']}:{report['machine_id']}"] = report
             save_store(store)
         self._send(200, {"ok": True})
+
+    def _handle_pair(self):
+        """接続コードとトークンを交換する。"""
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            self._send(400, {"error": "bad_request"})
+            return
+        if length <= 0 or length > 1024:
+            self._send(400, {"error": "bad_request"})
+            return
+        try:
+            payload = json.loads(self.rfile.read(length))
+        except ValueError:
+            self._send(400, {"error": "bad_request"})
+            return
+        if not isinstance(payload, dict):
+            self._send(400, {"error": "bad_request"})
+            return
+
+        with _lock:
+            ok = consume_pairing(str(payload.get("code", "")))
+
+        if not ok:
+            # 理由は返さない。期限切れか間違いかを区別させない。
+            self._send(400, {"error": "pairing_failed"})
+            return
+        self._send(200, {"token": self.token})
 
 
 def main() -> int:

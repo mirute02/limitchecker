@@ -57,4 +57,13 @@
     <string name="scheme_traffic">信号（緑・黄・朱）</string>
     <string name="where_work_machine">▸ Mac / Linux で操作します</string>
     <string name="where_this_phone">▸ この端末で操作します</string>
+    <string name="token_hint_or_code">長いトークンを手で入れる代わりに、下の接続コードを使えます。</string>
+    <string name="pair_label">接続コードで設定</string>
+    <string name="pair_hint">6桁のコード</string>
+    <string name="pair_button">コードで接続する</string>
+    <string name="pair_note">作業マシンで python3 hub/pair.py を実行すると6桁のコードが出ます。5分間有効で、1回使うと無効になります。</string>
+    <string name="pair_need_both">hub の URL と接続コードの両方が必要です。</string>
+    <string name="pair_working">接続中…</string>
+    <string name="pair_ok">接続しました。トークンを受け取って保存しました。</string>
+    <string name="pair_failed">接続できません。コードが違うか、期限が切れています。作業マシンで新しいコードを発行してください。</string>
 </resources>

@@ -74,7 +74,19 @@ systemd（Linux）と launchd（macOS）の違いはスクリプトが吸収す�
 
 ### 2. agent を仕込む（Claude Code を使うマシンごと）
 
-常駐プロセスは不要。`settings.json` に以下を足すだけ。
+```sh
+./deploy/install-agent.sh
+```
+
+`settings.json` に statusLine を足し、Codex があれば定期実行も登録する。
+既存の設定は壊さない。別の statusLine が既にある場合は上書きせず中止する。
+
+```sh
+./deploy/install-agent.sh --status      # 状態を見る
+./deploy/install-agent.sh --uninstall   # 外す
+```
+
+手で設定する場合は `settings.json` に以下を足す。
 
 ```json
 {
@@ -119,7 +131,16 @@ gradle assembleDebug
 必要なもの: JDK 17 以上、Android SDK（compileSdk 37）、Gradle 9 系。
 できた `app/build/outputs/apk/debug/app-debug.apk` を端末に入れる。
 
-アプリを開いて hub の URL とトークンを入れ、「保存して接続を確認」を押す。
+アプリを開いて hub の URL とトークンを入れる。
+
+トークンは43文字あるので、**接続コードを使うほうが早い**。hub を置いたマシンで:
+
+```sh
+python3 hub/pair.py
+```
+
+6桁のコードが出るので、アプリの「接続コードで設定」に URL と一緒に入れる。
+コードは5分間有効で、1回使うと無効になる。5回間違えると打ち切る。
 ウィジェットを置かなくても、設定画面のプレビューで見た目を確認できる。
 
 ## 権限

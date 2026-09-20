@@ -47,6 +47,7 @@ class SettingsActivity : Activity() {
 
     private lateinit var urlField: EditText
     private lateinit var tokenField: EditText
+    private lateinit var codeField: EditText
     private lateinit var statusText: TextView
     private lateinit var preview: ImageView
     private lateinit var instructions: LinearLayout
@@ -121,6 +122,22 @@ class SettingsActivity : Activity() {
             }
         }
         root.addView(tokenField, wide())
+        root.addView(note(getString(R.string.token_hint_or_code)))
+
+        // ---- 接続コードでの設定 ----
+        root.addView(label(getString(R.string.pair_label)))
+        codeField = EditText(this).apply {
+            setSingleLine()
+            inputType = InputType.TYPE_CLASS_NUMBER
+            hint = getString(R.string.pair_hint)
+        }
+        root.addView(codeField, wide())
+        root.addView(Button(this).apply {
+            text = getString(R.string.pair_button)
+            setOnClickListener { pairWithCode() }
+        }, wide())
+        root.addView(note(getString(R.string.pair_note)))
+
         root.addView(note(getString(R.string.token_storage_note)))
         if (!TokenStore.isUsable()) {
             root.addView(note(getString(R.string.token_keystore_unavailable)))
@@ -211,6 +228,33 @@ class SettingsActivity : Activity() {
         // 未接続のように見えてしまうのを避ける。
         statusText.text = getString(R.string.testing)
         fetchInBackground(completeConfigureOnFinish = false)
+    }
+
+    /** 接続コードを hub に送り、返ってきたトークンを保存する。 */
+    private fun pairWithCode() {
+        val url = urlField.text.toString().trim()
+        val code = codeField.text.toString().trim()
+        if (url.isEmpty() || code.isEmpty()) {
+            statusText.text = getString(R.string.pair_need_both)
+            return
+        }
+        statusText.text = getString(R.string.pair_working)
+
+        Thread {
+            val token = HubClient.pair(url, code)
+            runOnUiThread {
+                if (token == null) {
+                    // 期限切れか間違いかは hub 側でも区別していない
+                    statusText.text = getString(R.string.pair_failed)
+                    return@runOnUiThread
+                }
+                Prefs.save(this, url, token)
+                codeField.setText("")
+                tokenField.hint = getString(R.string.token_hint_saved)
+                statusText.text = getString(R.string.pair_ok)
+                fetchInBackground(completeConfigureOnFinish = true)
+            }
+        }.start()
     }
 
     private fun saveAndTest() {
