@@ -1,5 +1,7 @@
 # limitchecker
 
+[English](README.en.md) | 日本語
+
 Claude Code と Codex の残量を、Android のホーム画面と通知領域で把握するためのツール。
 
 長い作業に入る前に残量が分からず途中で止まる、という困りごとを解決する。
@@ -8,14 +10,14 @@ Claude Code と Codex の残量を、Android のホーム画面と通知領域�
 
 **このアプリは Claude や OpenAI のアカウントにログインしない。** API キーも要求しない。
 
-残量は、すでにログイン済みの Claude Code が statusLine に渡してくる値をそのまま使う。
-そのため:
+- Claude Code — statusLine に渡ってくる値をそのまま使う
+- Codex — App Server の `account/rateLimits/read` を呼ぶ。認証は App Server が扱う
 
-- `~/.claude/.credentials.json` を読まない・コピーしない・送らない
-- Android アプリが持つ秘密は、自分で立てた hub のトークン1つだけ
-- 認証情報の保管場所がそもそも存在しない
+どちらも `~/.claude/.credentials.json` や `~/.codex/auth.json` を読まない。
+**Android アプリが持つ秘密は、自分で立てた hub のトークン1つだけ**で、
+それも Android Keystore の鍵で暗号化して保存する。
 
-代償として、**残量は Claude Code が動いているときにしか更新されない**。
+代償として、**Claude Code の残量は Claude Code が動いているときにしか更新されない**。
 値が古くなったら、正確なふりをせずグレーにして「未更新」と表示する。
 
 ## 仕組み
@@ -25,26 +27,34 @@ Claude Code と Codex の残量を、Android のホーム画面と通知領域�
 ┌──────────────────┐          ┌─────────┐      ┌──────────┐
 │ Claude Code          │          │          │      │ ウィジェット │
 │   └ statusLine ──→ agent │ ──POST──→│   hub    │──GET─→│ 常設通知    │
+│ Codex app-server ──→ agent │          │          │      │ ステータスバー│
 └──────────────────┘          └─────────┘      └──────────┘
 ```
 
 | 要素 | 役割 | 常駐 |
 | --- | --- | --- |
-| agent | statusLine から残量だけを抜き出して hub へ送る | 不要 |
+| agent | 残量だけを抜き出して hub へ送る | 不要 |
 | hub | 全マシンの状態を集約し、アカウント単位に畳んで返す | 1台のみ |
-| Android | ウィジェットと通知で表示する | — |
+| Android | ウィジェット・通知・ステータスバーで表示する | — |
 
 残量の枠はアカウントに紐づくため、マシンが増えてもリングは1組のまま。
-マシンの一覧だけが増える。
 
 ## 表示
 
-- **二重ドーナツ**: 外側が5時間枠、中央が週次枠。中心にリセットまでの時間
-- **残量は弧の長さ**で表す。色が読めなくても情報が失われない
-- **配色は5種類**から選べる。既定は色覚特性があっても判別できる組み合わせ
-- **背景は不透明・半透明・透過**から選べる
-- **ウィジェットは 1×1 まで縮小可能**。幅に応じて表示する要素を減らす
-- **通知センターに常設**できる。ステータスバーには残量の形か数字を出す
+大きさに応じて表現が変わる。
+
+| 大きさ | 表現 |
+| --- | --- |
+| 幅220dp・高さ170dp 以上 | **横棒**。枠の種類・残量・回復までの時間を並べる |
+| 幅190dp 以上 | 二重ドーナツを横に2つ |
+| 縦長 | 二重ドーナツを縦に2つ |
+| 1×1 など | 二重ドーナツを1つ |
+
+- **残量は弧や棒の長さ**で表す。色が読めなくても情報が失われない
+- **配色3種**（青とオレンジ / 濃淡のみ / 信号）。既定は色覚特性があっても判別できる
+- **背景3種**（不透明 / 半透明 / 透過）
+- **通知センターに常設**でき、ステータスバーにも出せる
+- ステータスバーに出すものは**4種**から選べる。サービスは Claude / Codex / 両方
 
 ## セットアップ
 
@@ -62,7 +72,6 @@ cd limitchecker
 
 systemd（Linux）と launchd（macOS）の違いはスクリプトが吸収する。
 起動時に自動で立ち上がり、落ちたら再起動する。
-トークンが未設定ならその場で生成して表示するので、その値を Android に入れる。
 
 ```sh
 ./deploy/install-hub.sh --status      # 状態を見る
@@ -72,47 +81,22 @@ systemd（Linux）と launchd（macOS）の違いはスクリプトが吸収す�
 外出先から見るなら `.env` の `LIMITCHECKER_BIND` を Tailscale のアドレスに変えて
 登録し直す。`0.0.0.0` は安全のため起動を拒否する。
 
-### 2. agent を仕込む（Claude Code を使うマシンごと）
+### 2. agent を仕込む（Claude Code / Codex を使うマシンごと）
 
 ```sh
 ./deploy/install-agent.sh
 ```
 
 `settings.json` に statusLine を足し、Codex があれば定期実行も登録する。
-既存の設定は壊さない。別の statusLine が既にある場合は上書きせず中止する。
+**既存の設定は壊さない。** 別の statusLine が既にある場合は上書きせず中止する。
 
 ```sh
 ./deploy/install-agent.sh --status      # 状態を見る
 ./deploy/install-agent.sh --uninstall   # 外す
 ```
 
-手で設定する場合は `settings.json` に以下を足す。
-
-```json
-{
-  "statusLine": {
-    "type": "command",
-    "command": "python3 /path/to/limitchecker/agent/statusline.py"
-  }
-}
-```
-
-Claude Code のステータス行に残量が出るようになり、同時に hub へ送られる。
-送信は60秒に間引き、バックグラウンドで行うためステータス行を待たせない。
-
-Codex も表示するなら、定期実行を1つ足す。Claude Code と違って呼んでくれる相手が
-いないため、cron や systemd timer から叩く。
-
-```sh
-*/10 * * * * cd /path/to/limitchecker && python3 agent/codex.py >/dev/null 2>&1
-```
-
-Codex App Server の `account/rateLimits/read` を使う。`~/.codex/auth.json` は読まない。
-認証は app-server が扱う。`thread/start` を行わないため Codex の枠は消費しない。
-
-**通信に回避策が要る環境（Termux など）では、`codex` のラッパーを `.env` で指定する。**
-`alias` はスクリプト内で展開されないため、指定しないと回避策を通らず
-`error sending request for url` で失敗する。
+Codex の通信に回避策が要る環境（Termux など）では、ラッパーを `.env` で指定する。
+`alias` はスクリプト内で展開されないため、指定しないと回避策を通らない。
 
 ```
 LIMITCHECKER_CODEX_BIN=/path/to/codex-wrapper
@@ -120,7 +104,7 @@ LIMITCHECKER_CODEX_BIN=/path/to/codex-wrapper
 
 ### 3. Android アプリ
 
-APK は配布していないため、自分でビルドする。
+[リリース](https://github.com/mirute02/limitchecker/releases)から APK を入れるか、自分でビルドする。
 
 ```sh
 cd android
@@ -129,19 +113,19 @@ gradle assembleDebug
 ```
 
 必要なもの: JDK 17 以上、Android SDK（compileSdk 37）、Gradle 9 系。
-できた `app/build/outputs/apk/debug/app-debug.apk` を端末に入れる。
 
-アプリを開いて hub の URL とトークンを入れる。
+### 4. 接続する
 
-トークンは43文字あるので、**接続コードを使うほうが早い**。hub を置いたマシンで:
+hub を置いたマシンで接続コードを発行する。
 
 ```sh
 python3 hub/pair.py
 ```
 
-6桁のコードが出るので、アプリの「接続コードで設定」に URL と一緒に入れる。
-コードは5分間有効で、1回使うと無効になる。5回間違えると打ち切る。
-ウィジェットを置かなくても、設定画面のプレビューで見た目を確認できる。
+6桁のコードが出るので、アプリの「接続コードで設定」に hub の URL と一緒に入れる。
+43文字のトークンを手で転記しなくてよい。
+
+コードは**5分間有効、1回限り、5回間違えると打ち切り**。
 
 ## 権限
 
@@ -179,12 +163,12 @@ git config core.hooksPath .githooks
 
 ## 制約
 
-- 残量は **Claude Code の実行中にしか更新されない**。10分を超えると薄く、
-  1時間を超えるとグレーになる
-- **モデル別の週次枠は取得できない**。statusLine が返すのは5時間枠と週次枠のみ
+- **Claude Code の残量は実行中にしか更新されない。** 10分を超えると薄く、
+  1時間を超えるとグレーになる。Codex は定期実行なのでこの制約を受けない
+- **モデル別の週次枠は取得できない。** statusLine が返すのは5時間枠と週次枠のみ
   （[確認結果](docs/findings-statusline.md)）
-- **Codex は定期実行が要る**。Claude Code と違い statusLine のような
-  呼び出し口がないため、cron や systemd timer から叩く
+- **入力待ちの通知は作っていない。** Claude Code の Remote Control に
+  同等の機能があるため（`/config` の「Push when actions required」）
 
 ## ドキュメント
 
@@ -194,20 +178,19 @@ git config core.hooksPath .githooks
 | [docs/decisions.md](docs/decisions.md) | 設計書からの変更点と、その理由 |
 | [docs/findings-statusline.md](docs/findings-statusline.md) | statusLine が返す値の実測 |
 | [docs/security.md](docs/security.md) | セキュリティ方針 |
+| [docs/audit-2026-09-20.md](docs/audit-2026-09-20.md) | 監査の記録 |
 
 ## 実装状況
 
-| 段階 | 内容 | 状態 |
-| --- | --- | --- |
-| 0 | statusLine の実測 | 完了 |
-| 1 | agent と hub | 完了 |
-| 2 | ウィジェット | 完了 |
-| 3 | フックとイベント検知 | 未着手 |
-| 4 | 即時通知 | 未着手 |
-| 5 | マシン別表示 | hub 側のみ完了 |
-| 6 | Codex 対応 | 未着手 |
-
-常設通知は段階4 の前倒しとして実装済み（前景サービスを使わない方式）。
+| 内容 | 状態 |
+| --- | --- |
+| agent と hub | 完了 |
+| ウィジェット | 完了 |
+| 常設通知・ステータスバー | 完了 |
+| Codex 対応 | 完了 |
+| 接続コード | 完了 |
+| 消費速度と枯渇予測 | 未着手 |
+| イベント検知 | 作らない（Remote Control で代替） |
 
 ## ライセンス
 
