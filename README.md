@@ -81,6 +81,28 @@ systemd（Linux）と launchd（macOS）の違いはスクリプトが吸収す�
 外出先から見るなら `.env` の `LIMITCHECKER_BIND` を Tailscale のアドレスに変えて
 登録し直す。`0.0.0.0` は安全のため起動を拒否する。
 
+### Tailscale で使うときの注意
+
+**hub が待ち受けるアドレスと、アプリが接続する URL は別物。**
+
+| | 生の IP `100.x.x.x` | MagicDNS 名 `gpu.xxx.ts.net` |
+| --- | --- | --- |
+| hub の `LIMITCHECKER_BIND` | 使える | 使える |
+| **アプリに入れる URL** | **通らない** | 通る |
+
+アプリは平文 HTTP の接続先を `localhost` と `*.ts.net` に限っている
+（`network_security_config`）。**IP アドレスはこの照合に一致しない**ため、
+`http://100.x.y.z:8787` を入れると平文が拒否されて接続できない。
+短縮名（`gpu` だけ）も `.ts.net` で終わらないので通らない。
+
+アプリには**完全な MagicDNS 名**を入れる。
+
+```
+http://gpu.tailnet-name.ts.net:8787
+```
+
+MagicDNS 名は Tailscale の管理画面か、`tailscale status` で確認できる。
+
 ### 2. agent を仕込む（Claude Code / Codex を使うマシンごと）
 
 ```sh

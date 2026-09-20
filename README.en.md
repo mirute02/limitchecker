@@ -88,6 +88,28 @@ To reach it from outside your home, change `LIMITCHECKER_BIND` in `.env` to your
 Tailscale address and register again. **`0.0.0.0` is refused at startup** so a
 misconfiguration cannot expose the hub to the internet.
 
+### Using it over Tailscale
+
+**The address the hub binds to and the URL you give the app are not the same thing.**
+
+| | Raw IP `100.x.x.x` | MagicDNS name `gpu.xxx.ts.net` |
+| --- | --- | --- |
+| `LIMITCHECKER_BIND` on the hub | Works | Works |
+| **URL you enter in the app** | **Refused** | Works |
+
+The app permits cleartext HTTP only to `localhost` and `*.ts.net`
+(`network_security_config`). **An IP address does not match that rule**, so
+`http://100.x.y.z:8787` is refused before any request is sent. A short name
+(just `gpu`) does not end in `.ts.net`, so it is refused too.
+
+Give the app the **full MagicDNS name**:
+
+```
+http://gpu.tailnet-name.ts.net:8787
+```
+
+You can find it in the Tailscale admin console or with `tailscale status`.
+
 ### 2. Install the agent (on every machine running Claude Code or Codex)
 
 ```sh

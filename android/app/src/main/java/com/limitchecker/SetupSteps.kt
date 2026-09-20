@@ -40,34 +40,43 @@ object SetupSteps {
         Item.Body("常時起動している Linux 機を勧めます。Mac でも手順は同じです。"),
         Item.Body("Android でも動きますが、メモリ不足でバックグラウンドが止められるため常用には向きません。"),
 
-        Item.Head("2. 取得して常駐させる", Where.WORK_MACHINE),
+        Item.Head("2. hub を常駐させる", Where.WORK_MACHINE),
         Item.Body("次の3つを、そのマシンの端末で打ちます。Linux でも macOS でも同じです。"),
-        Item.Command("git clone <リポジトリ> limitchecker"),
+        Item.Command("git clone https://github.com/mirute02/limitchecker.git"),
         Item.Command("cd limitchecker"),
         Item.Command("./deploy/install-hub.sh"),
         Item.Body("systemd（Linux）と launchd（macOS）の違いは、スクリプトが吸収します。起動時に自動で立ち上がり、落ちたら再起動します。以後さわる必要はありません。"),
-        Item.Body("トークンが未設定なら、その場で生成して画面に出します。その値をこの端末に持ってきて、上のトークン欄に入れます。"),
-
-        Item.Head("3. 状態を見る・やめる", Where.WORK_MACHINE),
+        Item.Body("状態を見る、やめるときはこうします。"),
         Item.Command("./deploy/install-hub.sh --status"),
         Item.Command("./deploy/install-hub.sh --uninstall"),
 
-        Item.Head("4. 待ち受け先", Where.WORK_MACHINE),
-        Item.Body("同じ端末だけで使うなら、既定のままで構いません。外出先から見るなら .env の次の行を Tailscale のアドレスに変えます。0.0.0.0 は安全のため起動を拒否します。"),
-        Item.Command("LIMITCHECKER_BIND=127.0.0.1"),
-        Item.Body("変えたあとは登録し直します。"),
+        Item.Head("3. 残量を送る設定", Where.WORK_MACHINE),
+        Item.Body("Claude Code や Codex を使うマシンごとに実行します。常駐プロセスは不要です。"),
+        Item.Command("./deploy/install-agent.sh"),
+        Item.Body("settings.json に statusLine を足し、Codex があれば定期実行も登録します。既存の設定は壊しません。別の statusLine が既にある場合は、上書きせず中止します。"),
+        Item.Body("Codex の通信に回避策が要る環境（Termux など）では、.env でラッパーを指定します。alias はスクリプト内で展開されないため、指定しないと回避策を通りません。"),
+        Item.Command("LIMITCHECKER_CODEX_BIN=/path/to/codex-wrapper"),
+
+        Item.Head("4. この端末で接続する", Where.THIS_PHONE),
+        Item.Body("hub を置いたマシンで接続コードを発行します。"),
+        Item.Command("python3 hub/pair.py"),
+        Item.Body("6桁のコードが出るので、この画面の「接続コードで設定」に hub の URL と一緒に入れます。長いトークンを手で写さずに済みます。"),
+        Item.Body("コードは5分間有効で、1回使うと無効になります。5回間違えると打ち切ります。"),
+
+        Item.Head("5. 外出先から見る（任意）", Where.WORK_MACHINE),
+        Item.Body(".env の次の行を Tailscale のアドレスに変えて、登録し直します。0.0.0.0 は安全のため起動を拒否します。"),
+        Item.Command("LIMITCHECKER_BIND=100.x.y.z"),
         Item.Command("./deploy/install-hub.sh"),
 
-        Item.Head("5. 残量を送る設定", Where.WORK_MACHINE),
-        Item.Body("Claude Code を使うマシンごとに設定します。常駐プロセスは不要です。settings.json に次を足すだけです。"),
-        Item.Command("\"statusLine\": { \"type\": \"command\", \"command\": \"python3 /path/to/limitchecker/agent/statusline.py\" }"),
-        Item.Body("Claude Code を動かすと、ステータス行に残量が出て、同時に hub へ送られます。"),
-
-        Item.Head("6. 接続する", Where.THIS_PHONE),
-        Item.Body("この画面の上に戻り、hub の URL と、手順2で表示されたトークンを入れて「保存して接続を確認」を押します。成功するとプレビューにドーナツが出ます。"),
+        Item.Head("5b. アプリに入れる URL に注意", Where.THIS_PHONE),
+        Item.Body("hub が待ち受けるアドレスと、この画面に入れる URL は別物です。"),
+        Item.Body("平文 HTTP で接続できるのは、この端末自身と *.ts.net のみです。IP アドレスはこの条件に一致しないため、http://100.x.y.z:8787 を入れると接続できません。短縮名（gpu だけ）も .ts.net で終わらないので通りません。"),
+        Item.Body("完全な MagicDNS 名を入れてください。Tailscale の管理画面か tailscale status で確認できます。"),
+        Item.Command("http://gpu.tailnet-name.ts.net:8787"),
 
         Item.Head("覚えておくこと", Where.THIS_PHONE),
-        Item.Body("残量は Claude Code が動いているときにしか更新されません。しばらく使っていないと値が古くなります。10分を超えると薄く、1時間を超えるとグレーになって「未更新」と出ます。故障ではなく仕様です。"),
+        Item.Body("Claude Code の残量は、Claude Code が動いているときにしか更新されません。しばらく使っていないと値が古くなります。10分を超えると薄く、1時間を超えるとグレーになって「未更新」と出ます。故障ではなく仕様です。"),
+        Item.Body("Codex は定期実行で取るため、この制約を受けません。"),
     )
 
     /** コピーできるコマンドの数。本数を数えて確かめるために使う。 */
