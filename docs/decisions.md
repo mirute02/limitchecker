@@ -452,31 +452,76 @@ Kotlin の文字列は改行も `<` も素通しで、解析も不要になる�
 
 設定画面には色の見本を添える。名前だけでは判断できないため。
 
-## D28. Codex は保留。未設定のサービスは表示しない
+## D28. Codex は app-server の API から取得する（訂正あり）
 
-**確認結果（設計書の未確定事項2への回答）**: Codex CLI 0.155.1 を実機に入れて検証した。
-**認証情報を読まずに残量を取る経路は存在しない。**
+**当初の結論は誤っていた。** 「認証情報を読まずに残量を取る経路は存在しない」と
+書いたが、これは CLI のサブコマンド・`doctor`・`exec --json` のイベントしか
+調べていなかったための誤りだった。**app-server のプロトコルを見ていなかった。**
 
-| 試したこと | 結果 |
+### 正しい状況
+
+Codex App Server の JSON-RPC に `account/rateLimits/read` がある。
+`codex app-server generate-json-schema` でプロトコルを出力して確認した。
+
+```
+account/rateLimits/read
+account/rateLimits/updated
+account/usage/read
+account/rateLimitResetCredit/consume
+```
+
+応答の型は `GetAccountRateLimitsResponse.json` に定義があり、
+`usedPercent` / `windowDurationMins` / `resetsAt` / `PlanType` / `CreditsSnapshot`
+を含む。5時間枠と週次枠は `windowDurationMins` で区別する（300 と 10080）。
+
+**呼び出し側は `~/.codex/auth.json` を読まない。** app-server がログイン済みの
+認証を自分で扱い、クライアントは JSON-RPC を投げるだけでよい。
+したがって [security.md](security.md) の不変条件に反しない。
+
+### 消費について
+
+`initialize` と `account/rateLimits/read` だけなら、`thread/start` も `turn/start` も
+行わないためモデルへの推論要求にはならず、5時間枠・週次枠を消費しない。
+実装では取得間隔を絞るが、これは枠の消費ではなく通信回数を抑えるため。
+
+### 呼び方
+
+```
+{"method":"initialize","id":1,"params":{"clientInfo":{...}}}
+{"method":"initialized","params":{}}
+{"method":"account/rateLimits/read","id":2}
+```
+
+標準入力を閉じると応答前にサーバが終了するため、応答を受け取るまで開いておく。
+
+### 実機での状況
+
+| 環境 | 結果 |
 | --- | --- |
-| `codex` に usage 相当のサブコマンド | なし（`login` `doctor` `exec` 等のみ） |
-| `codex doctor` | 認証状態は出るが残量は出ない |
-| `codex exec --json` のイベント | `thread.started` / `turn.started` / `item.completed` / `error` のみ。残量なし |
-| 設定側のフック | ローカルに定義なし |
+| プロトコルにメソッドが存在するか | **あり**（スキーマで確認） |
+| 呼び出しが届くか | **届く**（`initialize` は成功、id=2 も処理された） |
+| Termux (Android) | 取得に失敗する。`error sending request for url (https://chatgpt.com/backend-api/wham/usage)` |
+| ネットワーク到達性 | 問題なし（同 URL に curl で 401 が返る＝到達している） |
 
-残る経路は `~/.codex/auth.json` を読んで内部エンドポイントを叩くことだが、
-これは [security.md](security.md) の不変条件（CLI の認証情報を読まない）に反する。
+Termux での失敗は環境固有の問題で、プロトコル側の問題ではない。
+hub と agent は Mac / Linux に置く前提なので、実用上の支障は小さい。
 
-**決定**: Codex 対応は保留する。方針を曲げてまで実装しない。
-Codex 側に statusLine 相当の仕組みが用意されたら再検討する。
+### 教訓
 
-**波及**: 一度も報告がないサービスは、ウィジェットに**表示しない**。
-従来は常にグレーのリングが並んでいたが、設定していないだけのものを
-「取得不可」と出し続けると故障しているように見える。
+**「CLI に見当たらない」を「経路が存在しない」と書いた。** 調べた範囲と
+結論の範囲が食い違っていた。`generate-json-schema` のような、
+プロトコルそのものを吐く手段があるなら先にそれを見るべきだった。
 
-hub は `configured` を返し、未設定（一度も報告なし）と
+## D28b. 未設定のサービスは表示しない
+
+**決定**: 一度も報告がないサービスは、ウィジェットに表示しない。
+
+**理由**: 設定していないだけのものを「取得不可」とグレーで出し続けると
+故障しているように見える。hub は `configured` を返し、未設定（一度も報告なし）と
 設定済みだが取得に失敗した状態（`available: false`）を区別する。
 後者は従来どおりグレーで表示する。
+
+Codex 対応が入っても、設定していない人には Claude だけが出るため、この分離は有効。
 
 ## D29. 設定項目を減らす
 

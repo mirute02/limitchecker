@@ -88,6 +88,16 @@ systemd（Linux）と launchd（macOS）の違いはスクリプトが吸収す�
 Claude Code のステータス行に残量が出るようになり、同時に hub へ送られる。
 送信は60秒に間引き、バックグラウンドで行うためステータス行を待たせない。
 
+Codex も表示するなら、定期実行を1つ足す。Claude Code と違って呼んでくれる相手が
+いないため、cron や systemd timer から叩く。
+
+```sh
+*/10 * * * * cd /path/to/limitchecker && python3 agent/codex.py >/dev/null 2>&1
+```
+
+Codex App Server の `account/rateLimits/read` を使う。`~/.codex/auth.json` は読まない。
+認証は app-server が扱う。`thread/start` を行わないため Codex の枠は消費しない。
+
 ### 3. Android アプリ
 
 APK は配布していないため、自分でビルドする。
@@ -144,7 +154,9 @@ git config core.hooksPath .githooks
   1時間を超えるとグレーになる
 - **モデル別の週次枠は取得できない**。statusLine が返すのは5時間枠と週次枠のみ
   （[確認結果](docs/findings-statusline.md)）
-- **Codex は未対応**。リングはグレーで「取得不可」と表示される
+- **Codex は Mac / Linux でのみ動作**。Termux では Codex App Server 側の取得が
+  失敗する（`error sending request for url`）。ネットワーク到達性の問題ではなく
+  環境固有のもの
 
 ## ドキュメント
 
