@@ -163,6 +163,17 @@ The app's interface is in Japanese.
 The code is **valid for five minutes, single use, and cut off after five wrong
 attempts**.
 
+### 5. Confirm it arrives
+
+On the machine running the agent:
+
+```sh
+./deploy/install-agent.sh --status
+```
+
+It tries the real path and reports why if anything fails. **It does not overwrite
+your quota values.**
+
 ## Permissions
 
 | Permission | Purpose | Runtime prompt |
@@ -212,6 +223,80 @@ If you contribute, enable that hook:
 git config core.hooksPath .githooks
 ```
 
+## When it does not work
+
+In the order these actually came up. **Checking from the top is fastest.**
+
+### "Connected, but no quota has arrived yet"
+
+The hub is reachable but the agent is not sending.
+
+```sh
+./deploy/install-agent.sh --status
+```
+
+This tries the real path: destination, authentication, and whether the payload is
+accepted. **It does not overwrite your quota values.**
+
+If it reports OK, just **run Claude Code once**. `statusLine` fires on every
+interaction, but posts to the hub are throttled to once a minute, so it may not
+appear immediately.
+
+### Changing the hub config has no effect
+
+The hub reads `.env` **only at startup**. Register again after editing it.
+
+```sh
+./deploy/install-hub.sh
+```
+
+`--status` prints both the value in `.env` and the port actually open. If they
+disagree, the service was not restarted.
+
+### "Cannot reach the hub"
+
+Check the hub first.
+
+```sh
+./deploy/install-hub.sh --status
+```
+
+If it is listening on `127.0.0.1`, **no other device can reach it**. Set
+`LIMITCHECKER_BIND=tailscale` in `.env` and register again.
+
+If it is listening on a Tailscale address, check the **URL you gave the app**. An
+IP will not work; it must be the MagicDNS name. `--status` prints the correct URL.
+
+### "The token is wrong"
+
+`LIMITCHECKER_TOKEN` in the hub's `.env` does not match what the app has.
+**Use a pairing code and there is nothing to mistype.**
+
+```sh
+python3 hub/pair.py
+```
+
+### The Codex ring is missing
+
+That hub has never received a Codex report. Services you have not set up are
+**hidden rather than greyed out**, so they do not look broken.
+
+```sh
+./deploy/install-agent.sh --codex
+python3 agent/codex.py        # to try it right away
+```
+
+Unlike Claude Code, nothing calls Codex for you, so it needs a periodic run.
+
+### Values look dim or grey
+
+**By design.** Claude Code's numbers only refresh while Claude Code is running.
+After ten minutes they dim; after an hour they go grey and say "未更新" (stale).
+This is deliberate: a stale number is never shown as if it were current.
+
+Codex is polled, so it is unaffected.
+
+
 ## Limitations
 
 - **Claude Code's numbers only refresh while Claude Code runs.** After ten minutes
@@ -243,6 +328,7 @@ Design notes are written in Japanese.
 | Pinned notification and status bar | Done |
 | Codex support | Done |
 | Pairing code | Done |
+| Connectivity check | Done |
 | Burn rate and exhaustion forecast | Not started |
 | Event detection | Dropped in favour of Remote Control |
 

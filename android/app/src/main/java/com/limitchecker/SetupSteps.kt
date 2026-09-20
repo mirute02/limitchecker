@@ -63,6 +63,12 @@ object SetupSteps {
         Item.Body("6桁のコードが出るので、この画面の「接続コードで設定」に hub の URL と一緒に入れます。長いトークンを手で写さずに済みます。"),
         Item.Body("コードは5分間有効で、1回使うと無効になります。5回間違えると打ち切ります。"),
 
+        Item.Head("4b. 届いているか確かめる", Where.WORK_MACHINE),
+        Item.Body("残量が出ないときは、作業マシンでこれを実行します。送信先・認証・受理の可否をその場で試します。"),
+        Item.Command("./deploy/install-agent.sh --status"),
+        Item.Body("「OK: 送信が届き…」と出たら、あとは Claude Code を一度動かすだけです。hub への送信は60秒に間引いているため、すぐに出ないことがあります。"),
+        Item.Body("この確認は残量の値を書き換えません。"),
+
         Item.Head("5. 外出先から見る（任意）", Where.WORK_MACHINE),
         Item.Body(".env を次のようにして、もう一度 install-hub.sh を実行します。tailscale と書けば、その機械の Tailscale アドレスを自動で引きます。"),
         Item.Command("LIMITCHECKER_BIND=tailscale"),
@@ -73,6 +79,14 @@ object SetupSteps {
         Item.Body("待ち受けるアドレスと、この画面に入れる URL は別物です。平文 HTTP で接続できるのは、この端末自身と *.ts.net のみです。"),
         Item.Body("IP アドレスはこの条件に一致しないため、http://100.x.y.z:8787 を入れると通信する前に拒否されます。短縮名（gpu だけ）も .ts.net で終わらないので通りません。"),
         Item.Command("http://gpu.tailnet-name.ts.net:8787"),
+
+        Item.Head("うまくいかないとき", Where.WORK_MACHINE),
+        Item.Body("設定を変えたのに反映されないときは、hub を再登録します。hub は .env を起動時にしか読みません。"),
+        Item.Command("./deploy/install-hub.sh"),
+        Item.Body("--status を付けると、.env に書いた値と実際に開いているポートの両方が出ます。食い違っていれば再起動されていません。"),
+        Item.Body("「hub に接続できません」なら、待ち受けが 127.0.0.1 のままかもしれません。その場合は他の端末から繋がりません。"),
+        Item.Body("「トークンが違います」なら、接続コードを使うと転記ミスが起きません。"),
+        Item.Body("Codex のリングが出ないときは、その hub が Codex の報告を一度も受けていません。設定していないサービスは、故障に見えないよう表示しない作りです。"),
 
         Item.Head("覚えておくこと", Where.THIS_PHONE),
         Item.Body("Claude Code の残量は、Claude Code が動いているときにしか更新されません。しばらく使っていないと値が古くなります。10分を超えると薄く、1時間を超えるとグレーになって「未更新」と出ます。故障ではなく仕様です。"),
