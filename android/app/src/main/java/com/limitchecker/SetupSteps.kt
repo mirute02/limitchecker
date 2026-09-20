@@ -64,14 +64,14 @@ object SetupSteps {
         Item.Body("コードは5分間有効で、1回使うと無効になります。5回間違えると打ち切ります。"),
 
         Item.Head("5. 外出先から見る（任意）", Where.WORK_MACHINE),
-        Item.Body(".env の次の行を Tailscale のアドレスに変えて、登録し直します。0.0.0.0 は安全のため起動を拒否します。"),
-        Item.Command("LIMITCHECKER_BIND=100.x.y.z"),
+        Item.Body(".env を次のようにして、もう一度 install-hub.sh を実行します。tailscale と書けば、その機械の Tailscale アドレスを自動で引きます。"),
+        Item.Command("LIMITCHECKER_BIND=tailscale"),
         Item.Command("./deploy/install-hub.sh"),
+        Item.Body("実行すると、この画面に入れる URL をそのまま表示します。調べる必要はありません。"),
 
-        Item.Head("5b. アプリに入れる URL に注意", Where.THIS_PHONE),
-        Item.Body("hub が待ち受けるアドレスと、この画面に入れる URL は別物です。"),
-        Item.Body("平文 HTTP で接続できるのは、この端末自身と *.ts.net のみです。IP アドレスはこの条件に一致しないため、http://100.x.y.z:8787 を入れると接続できません。短縮名（gpu だけ）も .ts.net で終わらないので通りません。"),
-        Item.Body("完全な MagicDNS 名を入れてください。Tailscale の管理画面か tailscale status で確認できます。"),
+        Item.Head("5b. URL は IP ではなく名前", Where.THIS_PHONE),
+        Item.Body("待ち受けるアドレスと、この画面に入れる URL は別物です。平文 HTTP で接続できるのは、この端末自身と *.ts.net のみです。"),
+        Item.Body("IP アドレスはこの条件に一致しないため、http://100.x.y.z:8787 を入れると通信する前に拒否されます。短縮名（gpu だけ）も .ts.net で終わらないので通りません。"),
         Item.Command("http://gpu.tailnet-name.ts.net:8787"),
 
         Item.Head("覚えておくこと", Where.THIS_PHONE),

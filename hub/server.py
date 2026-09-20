@@ -17,6 +17,7 @@ import hmac
 import json
 import os
 import re
+import subprocess
 import sys
 import threading
 import time
@@ -387,6 +388,25 @@ class Handler(BaseHTTPRequestHandler):
         self._send(200, {"token": self.token})
 
 
+def resolve_tailscale_ip() -> str | None:
+    """この機械の Tailscale アドレス（IPv4）を引く。取れなければ None。"""
+    try:
+        out = subprocess.run(
+            ["tailscale", "ip", "-4"],
+            capture_output=True, text=True, timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if out.returncode != 0:
+        return None
+    for line in out.stdout.splitlines():
+        candidate = line.strip()
+        # 想定どおりの形かを確かめてから使う
+        if re.match(r"^100\.(6[4-9]|[7-9][0-9]|1[0-1][0-9]|12[0-7])\.[0-9]{1,3}\.[0-9]{1,3}$", candidate):
+            return candidate
+    return None
+
+
 def main() -> int:
     env = load_env()
 
@@ -403,6 +423,23 @@ def main() -> int:
         return 2
 
     bind = env.get("LIMITCHECKER_BIND", "127.0.0.1").strip()
+
+    # "tailscale" と書けば、この機械の Tailscale アドレスを自動で引く。
+    # 待ち受けは「自分のどの口で待つか」なので、名前ではなく実在する
+    # アドレスが要る。毎回 tailscale ip -4 を打たせないための省略記法。
+    if bind.lower() == "tailscale":
+        resolved = resolve_tailscale_ip()
+        if not resolved:
+            print(
+                "Tailscale のアドレスを取得できません。\n"
+                "  tailscale ip -4 が動くか確認するか、"
+                "LIMITCHECKER_BIND にアドレスを直接書いてください。",
+                file=sys.stderr,
+            )
+            return 2
+        print(f"Tailscale のアドレスを使います: {resolved}", file=sys.stderr)
+        bind = resolved
+
     if bind in ("0.0.0.0", "::", ""):
         print(
             f"LIMITCHECKER_BIND に {bind or '(空)'} は指定できません。\n"

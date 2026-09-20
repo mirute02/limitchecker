@@ -78,30 +78,41 @@ systemd（Linux）と launchd（macOS）の違いはスクリプトが吸収す�
 ./deploy/install-hub.sh --uninstall   # 登録を外す
 ```
 
-外出先から見るなら `.env` の `LIMITCHECKER_BIND` を Tailscale のアドレスに変えて
-登録し直す。`0.0.0.0` は安全のため起動を拒否する。
+外出先から見るなら `.env` を次のようにして、もう一度実行する。
+
+```
+LIMITCHECKER_BIND=tailscale
+```
+
+`tailscale` と書けば、この機械の Tailscale アドレスを自動で引く。
+`0.0.0.0` は安全のため起動を拒否する。
 
 ### Tailscale で使うときの注意
 
-**hub が待ち受けるアドレスと、アプリが接続する URL は別物。**
+**hub が待ち受けるアドレスと、アプリに入れる URL は別物。**
 
-| | 生の IP `100.x.x.x` | MagicDNS 名 `gpu.xxx.ts.net` |
-| --- | --- | --- |
-| hub の `LIMITCHECKER_BIND` | 使える | 使える |
-| **アプリに入れる URL** | **通らない** | 通る |
+| | 入れるもの |
+| --- | --- |
+| `.env` の `LIMITCHECKER_BIND` | `tailscale`（または IP）。「自分のどの口で待つか」なので実在するアドレスが要る |
+| **アプリの hub の URL** | **MagicDNS 名**。`http://gpu.tailnet-name.ts.net:8787` |
 
-アプリは平文 HTTP の接続先を `localhost` と `*.ts.net` に限っている
-（`network_security_config`）。**IP アドレスはこの照合に一致しない**ため、
-`http://100.x.y.z:8787` を入れると平文が拒否されて接続できない。
+アプリは平文 HTTP を `localhost` と `*.ts.net` に限っている
+（`network_security_config`）。**Android の照合に IP アドレスは一致しない**ため、
+`http://100.x.y.z:8787` を入れると通信する前に拒否される。
 短縮名（`gpu` だけ）も `.ts.net` で終わらないので通らない。
 
-アプリには**完全な MagicDNS 名**を入れる。
+**調べなくてよい。** `./deploy/install-hub.sh` が最後に、
+アプリへ入れる URL をそのまま表示する。
 
 ```
-http://gpu.tailnet-name.ts.net:8787
+────────────────────────────────────────
+ Android アプリに入れる値
+────────────────────────────────────────
+  hub の URL : http://gpu.tailnet-name.ts.net:8787
+  接続コード : 次を実行すると6桁のコードが出ます
+               python3 /path/to/limitchecker/hub/pair.py
+────────────────────────────────────────
 ```
-
-MagicDNS 名は Tailscale の管理画面か、`tailscale status` で確認できる。
 
 ### 2. agent を仕込む（Claude Code / Codex を使うマシンごと）
 

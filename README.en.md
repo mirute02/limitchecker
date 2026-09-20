@@ -84,31 +84,32 @@ It starts at boot and restarts on failure.
 ./deploy/install-hub.sh --uninstall   # remove
 ```
 
-To reach it from outside your home, change `LIMITCHECKER_BIND` in `.env` to your
-Tailscale address and register again. **`0.0.0.0` is refused at startup** so a
-misconfiguration cannot expose the hub to the internet.
+To reach it from outside your home, set this in `.env` and run the script again:
+
+```
+LIMITCHECKER_BIND=tailscale
+```
+
+The literal word `tailscale` makes the hub look up this machine's Tailscale
+address. **`0.0.0.0` is refused at startup** so a misconfiguration cannot expose
+the hub to the internet.
 
 ### Using it over Tailscale
 
 **The address the hub binds to and the URL you give the app are not the same thing.**
 
-| | Raw IP `100.x.x.x` | MagicDNS name `gpu.xxx.ts.net` |
-| --- | --- | --- |
-| `LIMITCHECKER_BIND` on the hub | Works | Works |
-| **URL you enter in the app** | **Refused** | Works |
+| | What goes there |
+| --- | --- |
+| `LIMITCHECKER_BIND` in `.env` | `tailscale` (or an IP). A bind address must exist on this machine |
+| **hub URL in the app** | **The MagicDNS name**: `http://gpu.tailnet-name.ts.net:8787` |
 
 The app permits cleartext HTTP only to `localhost` and `*.ts.net`
 (`network_security_config`). **An IP address does not match that rule**, so
 `http://100.x.y.z:8787` is refused before any request is sent. A short name
 (just `gpu`) does not end in `.ts.net`, so it is refused too.
 
-Give the app the **full MagicDNS name**:
-
-```
-http://gpu.tailnet-name.ts.net:8787
-```
-
-You can find it in the Tailscale admin console or with `tailscale status`.
+**You do not have to look any of this up.** `./deploy/install-hub.sh` prints the
+exact URL to paste into the app when it finishes.
 
 ### 2. Install the agent (on every machine running Claude Code or Codex)
 

@@ -86,6 +86,7 @@ install_linux() {
 status_linux() {
     systemctl --user status limitchecker-hub --no-pager || true
     show_listening
+    show_app_url
 }
 
 uninstall_linux() {
@@ -115,6 +116,53 @@ status_mac() {
         echo "停止しています。"
     fi
     show_listening
+}
+
+# ------------------------------------------------------------------
+# アプリに入れる URL をそのまま出す。
+# 待ち受けアドレスと接続先が違うため、調べさせると間違える。
+# ------------------------------------------------------------------
+show_app_url() {
+    bind=$(grep "^LIMITCHECKER_BIND=" "$REPO/.env" 2>/dev/null | cut -d= -f2- || true)
+    port=$(grep "^LIMITCHECKER_PORT=" "$REPO/.env" 2>/dev/null | cut -d= -f2- || true)
+    bind=${bind:-127.0.0.1}
+    port=${port:-8787}
+
+    echo
+    echo "────────────────────────────────────────"
+    echo " Android アプリに入れる値"
+    echo "────────────────────────────────────────"
+
+    if [ "$bind" = "127.0.0.1" ] || [ "$bind" = "localhost" ]; then
+        echo "  hub の URL : http://127.0.0.1:$port"
+        echo
+        echo "  ※ この端末の中からしか繋がりません。"
+        echo "     外から見るには .env を次のようにして、もう一度実行します。"
+        echo "       LIMITCHECKER_BIND=tailscale"
+    else
+        dns=""
+        if command -v tailscale >/dev/null 2>&1; then
+            # MagicDNS 名（末尾のドットは落とす）
+            dns=$(tailscale status --json 2>/dev/null \
+                | tr ',' '\n' | grep -m1 '"DNSName"' | cut -d'"' -f4 | sed 's/\.$//' || true)
+        fi
+        if [ -n "$dns" ]; then
+            echo "  hub の URL : http://$dns:$port"
+            echo
+            echo "  ※ IP（http://$bind:$port）では繋がりません。"
+            echo "     Android は平文 HTTP を名前で照合するため、上の名前を使います。"
+        else
+            echo "  hub の URL : http://<マシン名>.<テイルネット名>.ts.net:$port"
+            echo
+            echo "  ※ MagicDNS 名が取れませんでした。tailscale status で確認してください。"
+            echo "     IP（http://$bind:$port）では繋がりません。"
+        fi
+    fi
+
+    echo
+    echo "  接続コード : 次を実行すると6桁のコードが出ます"
+    echo "               python3 $REPO/hub/pair.py"
+    echo "────────────────────────────────────────"
 }
 
 # ------------------------------------------------------------------
@@ -204,11 +252,7 @@ case "$ACTION" in
         "$install_fn"
         echo
         "$status_fn"
-        bind=$(grep '^LIMITCHECKER_BIND=' "$REPO/.env" 2>/dev/null | cut -d= -f2- || true)
-        port=$(grep '^LIMITCHECKER_PORT=' "$REPO/.env" 2>/dev/null | cut -d= -f2- || true)
-        echo
-        echo "Android アプリの hub の URL には次を入れてください:"
-        echo "  http://${bind:-127.0.0.1}:${port:-8787}"
+        show_app_url
         ;;
     *) echo "使い方: $0 [--status|--uninstall]" >&2; exit 1 ;;
 esac
