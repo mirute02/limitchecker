@@ -66,4 +66,10 @@
     <string name="pair_working">接続中…</string>
     <string name="pair_ok">接続しました。トークンを受け取って保存しました。</string>
     <string name="pair_failed">接続できません。コードが違うか、期限が切れています。作業マシンで新しいコードを発行してください。</string>
+    <string name="service_label">ステータスバーと通知に出すもの</string>
+    <string name="service_note">ステータスバーは小アイコン1つ、通知の折りたたみ時も1行しかないため、出すものを選びます。「両方」ではステータスバーの左が Claude Code、右が Codex の5時間枠になります。ウィジェットは幅があるので常に両方出ます。</string>
+    <string name="service_claude">Claude Code</string>
+    <string name="service_codex">Codex</string>
+    <string name="service_both">両方</string>
+    <string name="notif_title_both">Claude %1$d%% ・ Codex %2$d%%</string>
 </resources>

@@ -155,6 +155,10 @@ class SettingsActivity : Activity() {
         root.addView(statusText)
 
         // ---- プレビュー ----
+        root.addView(label(getString(R.string.service_label)))
+        root.addView(serviceChooser(), wide())
+        root.addView(note(getString(R.string.service_note)))
+
         root.addView(label(getString(R.string.scheme_label)))
         root.addView(schemeChooser(), wide())
         root.addView(note(getString(R.string.scheme_note)))
@@ -370,6 +374,28 @@ class SettingsActivity : Activity() {
             enableNotification()
         } else {
             statusText.text = getString(R.string.notification_denied)
+        }
+    }
+
+    /** ステータスバーと通知に出すサービスを選ばせる。 */
+    private fun serviceChooser(): RadioGroup {
+        val current = Prefs.serviceChoice(this)
+        return RadioGroup(this).apply {
+            orientation = RadioGroup.HORIZONTAL
+            ServiceChoice.entries.forEach { choice ->
+                addView(RadioButton(this@SettingsActivity).apply {
+                    id = View.generateViewId()
+                    text = getString(choice.labelRes)
+                    tag = choice
+                    isChecked = choice == current
+                })
+            }
+            setOnCheckedChangeListener { group, checkedId ->
+                val choice = group.findViewById<RadioButton>(checkedId)?.tag as? ServiceChoice
+                    ?: return@setOnCheckedChangeListener
+                Prefs.setServiceChoice(this@SettingsActivity, choice)
+                RefreshWorker.refreshNow(this@SettingsActivity, force = true)
+            }
         }
     }
 

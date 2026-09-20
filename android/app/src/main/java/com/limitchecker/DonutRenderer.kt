@@ -48,6 +48,10 @@ object DonutRenderer {
     /** これを下回ったら省略形。サービス名を出さず、リングと時間だけにする。 */
     private const val COMPACT_MAX_DP = 112
 
+    /** これ以上の大きさなら、ドーナツをやめて横棒にする。 */
+    private const val BARS_MIN_WIDTH_DP = 220
+    private const val BARS_MIN_HEIGHT_DP = 170
+
     fun render(
         widthPx: Int,
         heightPx: Int,
@@ -133,24 +137,58 @@ object DonutRenderer {
         val known = listOf("claude_code", "codex").filter { status.service(it)?.configured == true }
         val available = known.ifEmpty { listOf("claude_code") }
 
+        // 十分な面積があるなら、ドーナツより横棒のほうが情報量が多く読みやすい（D30）
+        if (widthDp >= BARS_MIN_WIDTH_DP && heightDp >= BARS_MIN_HEIGHT_DP) {
+            drawBars(canvas, width, height, palette, status, available, nowEpoch, shadow, scheme)
+            return
+        }
+
         val horizontal = available.size >= 2 && widthDp >= TWO_COLUMN_MIN_DP
         val vertical = available.size >= 2 && !horizontal && heightDp >= widthDp * 1.6f
         val count = if (horizontal || vertical) 2 else 1
 
         val ids = available.take(count)
-        val cellWidth = if (horizontal) width / 2f else width.toFloat()
-        val cellHeight = if (vertical) height / 2f else height.toFloat()
-        // 1セルの幅が狭ければ要素を減らして読める大きさを保つ
         val cellWidthDp = if (horizontal) widthDp / 2 else widthDp
         val compact = cellWidthDp < COMPACT_MAX_DP || (vertical && heightDp / 2 < COMPACT_MAX_DP)
 
+        if (vertical) {
+            // 各ドーナツを自分の半分の領域の中央に置くと、上下に使われない隙間が残る。
+            // 2つをひとまとまりとして配置し、余白を詰める。
+            val margin = minOf(width, height) * 0.03f
+            val gap = height * 0.03f
+            val diameter = minOf(
+                width - margin * 2,
+                (height - margin * 2 - gap) / 2f,
+            )
+            val groupTop = (height - (diameter * 2 + gap)) / 2f
+            ids.forEachIndexed { index, id ->
+                drawService(
+                    canvas = canvas,
+                    left = 0f,
+                    top = groupTop + (diameter + gap) * index,
+                    width = width.toFloat(),
+                    height = diameter,
+                    palette = palette,
+                    service = status.service(id),
+                    fallbackLabel = if (id == "codex") "Codex" else "Claude Code",
+                    nowEpoch = nowEpoch,
+                    compact = true,
+                    shadow = shadow,
+                    scheme = scheme,
+                    fixedDiameter = diameter,
+                )
+            }
+            return
+        }
+
+        val cellWidth = if (horizontal) width / 2f else width.toFloat()
         ids.forEachIndexed { index, id ->
             drawService(
                 canvas = canvas,
-                left = if (horizontal) cellWidth * index else 0f,
-                top = if (vertical) cellHeight * index else 0f,
+                left = cellWidth * index,
+                top = 0f,
                 width = cellWidth,
-                height = cellHeight,
+                height = height.toFloat(),
                 palette = palette,
                 service = status.service(id),
                 fallbackLabel = if (id == "codex") "Codex" else "Claude Code",
@@ -175,6 +213,7 @@ object DonutRenderer {
         compact: Boolean,
         shadow: Boolean,
         scheme: ColorScheme,
+        fixedDiameter: Float? = null,
     ) {
         // 余白は短いほうの辺で決める。幅だけで決めると、横に広くて背が低い形で
         // 余白が過大になり、ドーナツが極端に小さくなる。
@@ -189,7 +228,7 @@ object DonutRenderer {
 
         // 省略形ではサービス名を出さない。その分リングを大きく取る。
         var labelSize = if (compact) 0f else (shortSide * 0.12f)
-        var diameter = minOf(innerWidth, innerHeight - labelSize * 1.6f)
+        var diameter = fixedDiameter ?: minOf(innerWidth, innerHeight - labelSize * 1.6f)
 
         // ラベルのせいでグラフが目に見えて小さくなるなら、ラベルを捨てて
         // グラフを優先する。どの形でも同じ大きさのグラフが出るようにするため（D28）。
@@ -497,6 +536,119 @@ object DonutRenderer {
         drawRing(canvas, center, center, outerRadius, stroke, palette, outer, dead, 255, scheme)
         drawRing(canvas, center, center, middleRadius, stroke, palette, middle, dead, 255, scheme)
         return bitmap
+    }
+
+
+    // ------------------------------------------------------------------
+    // 大きいウィジェット向けの横棒
+    // ------------------------------------------------------------------
+
+    /**
+     * 面積があるときは、ドーナツより横棒のほうが読みやすい（D30）。
+     *
+     * ドーナツは「だいたいどれくらい」を速く伝えるのに向くが、面積が余る。
+     * 横棒なら、サービス名・枠の種類・残量・回復までの時間を並べて置ける。
+     */
+    private fun drawBars(
+        canvas: Canvas,
+        width: Int,
+        height: Int,
+        palette: Palette,
+        status: Status,
+        ids: List<String>,
+        nowEpoch: Long,
+        shadow: Boolean,
+        scheme: ColorScheme,
+    ) {
+        val pad = minOf(width, height) * 0.055f
+        val innerWidth = width - pad * 2
+
+        // 1サービスあたり: 見出し1行 + リング2本
+        val rowsPerService = 3
+        val totalRows = ids.size * rowsPerService
+        // サービス間の区切りぶんを見込む
+        val unit = (height - pad * 2) / (totalRows + (ids.size - 1) * 0.4f)
+
+        val titleSize = unit * 0.52f
+        val labelSize = unit * 0.42f
+        val barHeight = unit * 0.36f
+
+        // 数値は右端に揃える。桁が動いても行が崩れない。
+        val valuePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            textAlign = Paint.Align.RIGHT
+            textSize = labelSize
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            applyShadow(shadow, palette.isNight, textSize)
+        }
+        val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = palette.subText
+            textSize = labelSize
+            applyShadow(shadow, palette.isNight, textSize)
+        }
+        val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = palette.text
+            textSize = titleSize
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            applyShadow(shadow, palette.isNight, textSize)
+        }
+
+        // 一番長い値の幅を測って右側の領域を決める
+        val valueWidth = valuePaint.measureText("100% 000日")
+        val labelWidth = labelPaint.measureText("5時間枠") * 1.25f
+        val barWidth = innerWidth - labelWidth - valueWidth - pad
+
+        var y = pad + titleSize
+
+        ids.forEach { id ->
+            val service = status.service(id)
+            val fresh = Freshness.of(service?.updatedAtEpoch, nowEpoch)
+            val dead = service == null || !service.available || fresh == Freshness.EXPIRED
+            val alpha = if (fresh == Freshness.STALE && !dead) 150 else 255
+
+            canvas.drawText(service?.label ?: id, pad, y, titlePaint)
+            y += unit * 0.45f
+
+            listOf("outer" to "5時間枠", "middle" to "週次枠").forEach { (slot, name) ->
+                val ring = service?.ring(slot)
+                y += unit * 0.9f
+
+                canvas.drawText(name, pad, y + barHeight * 0.35f, labelPaint)
+
+                val barLeft = pad + labelWidth
+                val radius = barHeight / 2f
+
+                // 枠全体
+                canvas.drawRoundRect(
+                    RectF(barLeft, y - barHeight * 0.5f, barLeft + barWidth, y + barHeight * 0.5f),
+                    radius, radius,
+                    Paint(Paint.ANTI_ALIAS_FLAG).apply { color = palette.track },
+                )
+
+                if (!dead && ring != null) {
+                    val filled = (barWidth * ring.remaining).toFloat().coerceAtLeast(barHeight)
+                    canvas.drawRoundRect(
+                        RectF(barLeft, y - barHeight * 0.5f, barLeft + filled, y + barHeight * 0.5f),
+                        radius, radius,
+                        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                            color = scheme.ringColor(slot, ring.remaining, palette.isNight)
+                            this.alpha = alpha
+                        },
+                    )
+                }
+
+                val text = when {
+                    dead || ring == null -> "—"
+                    ring.resetsAtEpoch != null ->
+                        "${Math.round(ring.remaining * 100)}%  ${formatCountdown(ring.resetsAtEpoch - nowEpoch)}"
+                    else -> "${Math.round(ring.remaining * 100)}%"
+                }
+                valuePaint.color = if (dead) palette.gray else palette.text
+                valuePaint.alpha = alpha
+                canvas.drawText(text, (width - pad), y + barHeight * 0.35f, valuePaint)
+            }
+
+            y += unit * 0.9f
+        }
     }
 
     /** 1日未満は "H:MM"、それ以上は "N日"。 */

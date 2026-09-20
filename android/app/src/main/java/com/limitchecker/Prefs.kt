@@ -18,6 +18,7 @@ object Prefs {
     private const val KEY_STATUS_ICON = "status_icon_mode"
     private const val KEY_WIDGET_BG = "widget_background"
     private const val KEY_SCHEME = "color_scheme"
+    private const val KEY_SERVICE = "service_choice"
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
@@ -59,6 +60,14 @@ object Prefs {
 
     fun setColorScheme(context: Context, scheme: ColorScheme) {
         prefs(context).edit().putString(KEY_SCHEME, scheme.key).apply()
+    }
+
+    /** ステータスバーと通知に出すサービス。 */
+    fun serviceChoice(context: Context): ServiceChoice =
+        ServiceChoice.fromKey(prefs(context).getString(KEY_SERVICE, null))
+
+    fun setServiceChoice(context: Context, choice: ServiceChoice) {
+        prefs(context).edit().putString(KEY_SERVICE, choice.key).apply()
     }
 
     fun save(context: Context, url: String, token: String) {

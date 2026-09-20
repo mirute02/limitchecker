@@ -82,7 +82,10 @@ enum class ColorScheme(val key: String, val labelRes: Int) {
         private val GREEN_DARK = Color.parseColor("#3FC79A")
         private val AMBER_LIGHT = Color.parseColor("#B8860B")
         private val AMBER_DARK = Color.parseColor("#F0C000")
-        private val VERMILLION_LIGHT = Color.parseColor("#D55E00")
-        private val VERMILLION_DARK = Color.parseColor("#FF7043")
+        // 逼迫色。中央リングのオレンジと近すぎると、逼迫しても色が変わって見えない。
+        // 実測で距離44しかなかった #D55E00 をやめ、青ともオレンジとも離れた深紅にする。
+        // D型（緑が見えにくい型）で近似しても距離120を保つ。
+        private val VERMILLION_LIGHT = Color.parseColor("#B3002D")
+        private val VERMILLION_DARK = Color.parseColor("#FF5C7A")
     }
 }

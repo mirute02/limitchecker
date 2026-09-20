@@ -64,20 +64,32 @@ object StatusNotification {
         val now = System.currentTimeMillis() / 1000
         val scheme = Prefs.colorScheme(context)
 
-        val claude = (result as? HubClient.Result.Ok)?.status?.service("claude_code")
-        val outer = claude?.ring("outer")
-        val middle = claude?.ring("middle")
-        val fresh = Freshness.of(claude?.updatedAtEpoch, now)
-        val usable = claude?.available == true && outer != null && fresh != Freshness.EXPIRED
+        val choice = Prefs.serviceChoice(context)
+        val status = (result as? HubClient.Result.Ok)?.status
 
-        val title = if (usable) {
-            context.getString(
+        val primary = status?.service(choice.primaryServiceId)
+        val outer = primary?.ring("outer")
+        val middle = primary?.ring("middle")
+        val fresh = Freshness.of(primary?.updatedAtEpoch, now)
+        val usable = primary?.available == true && outer != null && fresh != Freshness.EXPIRED
+
+        // 「両方」のときは、両サービスの5時間枠を並べる
+        val secondary = if (choice == ServiceChoice.BOTH) status?.service("codex") else null
+        val secondaryOuter = secondary?.ring("outer")
+
+        val title = when {
+            !usable -> context.getString(R.string.notif_title_unavailable)
+            choice == ServiceChoice.BOTH && secondaryOuter != null ->
+                context.getString(
+                    R.string.notif_title_both,
+                    Math.round(outer!!.remaining * 100),
+                    Math.round(secondaryOuter.remaining * 100),
+                )
+            else -> context.getString(
                 R.string.notif_title,
                 Math.round(outer!!.remaining * 100),
                 Math.round((middle?.remaining ?: 0.0) * 100),
             )
-        } else {
-            context.getString(R.string.notif_title_unavailable)
         }
 
         val body = when {
@@ -93,8 +105,11 @@ object StatusNotification {
             DonutRenderer.renderStatusBarIcon(
                 sizePx = STATUS_ICON_PX,
                 mode = Prefs.statusIconMode(context),
+                // 「両方」のときは、左が Claude の5時間枠、右が Codex の5時間枠
                 outer = if (usable) outer else null,
-                middle = if (usable) middle else null,
+                middle = if (usable) {
+                    if (choice == ServiceChoice.BOTH) secondaryOuter else middle
+                } else null,
                 nowEpoch = now,
             )
         )
@@ -115,7 +130,11 @@ object StatusNotification {
         if (usable) {
             // 折りたたみ時は右端にリングの絵。数字だけより状態が伝わる
             builder.setLargeIcon(
-                DonutRenderer.renderBadge(BADGE_PX, outer, middle, night, dead = false, scheme = scheme)
+                DonutRenderer.renderBadge(
+                    BADGE_PX, outer,
+                    if (choice == ServiceChoice.BOTH) secondaryOuter else middle,
+                    night, dead = false, scheme = scheme,
+                )
             )
             // 展開するとウィジェットと同じ絵が大きく出る
             builder.setStyle(
