@@ -345,8 +345,8 @@ object DonutRenderer {
         when (mode) {
             StatusIconMode.RINGS_BOTH -> {
                 // 同心円を2本にすると 24dp では潰れて1本に見える。
-                // 円を上下に分け、それぞれ半周で表す。半周ぶんの太さを使えるので
-                // 小さくても両方読める。上が5時間枠、下が週次枠。
+                // 円を左右に分け、それぞれ半周で表す。半周ぶんの太さを使えるので
+                // 小さくても両方読める。左が5時間枠、右が週次枠。
                 drawSplitRing(canvas, size, outer!!.remaining, middle?.remaining)
             }
             StatusIconMode.RING_5H, StatusIconMode.RING_WEEK -> {
@@ -400,19 +400,24 @@ object DonutRenderer {
     }
 
     /**
-     * 上半分と下半分に分けて2つの値を表す。
+     * 左半分と右半分に分けて2つの値を表す。左が5時間枠、右が週次枠。
      *
-     * 上（左から右へ時計回り）が5時間枠、下（左から右へ反時計回り）が週次枠。
-     * 両方満タンなら1つの円になる。左右の端に隙間を空けて、上下が別物だと分かるようにする。
+     * **どちらも下端（6時）から上へ伸びる。** つまり残量は下に溜まり、
+     * 使うほど上から減っていく。水位が下がるのと同じ読み方で、
+     * 電池やタンクと同じ感覚で読める。
+     *
+     * 上下の端に隙間を空けて、左右が別物だと分かるようにする。
      */
-    private fun drawSplitRing(canvas: Canvas, size: Int, top: Double, bottom: Double?) {
+    private fun drawSplitRing(canvas: Canvas, size: Int, left: Double, right: Double?) {
         val center = size / 2f
         val stroke = size * 0.22f
         val radius = center - stroke / 2f - size * 0.04f
         val bounds = RectF(center - radius, center - radius, center + radius, center + radius)
-        // 左右に空ける隙間（度）。上下の境目をはっきりさせる。
+        // 上下に空ける隙間（度）。左右の境目をはっきりさせる。
         val gap = 12f
         val span = 180f - gap
+        // Android の角度は3時が 0 度で時計回り。6時は 90 度。
+        val bottom = 90f
 
         val track = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
@@ -428,17 +433,17 @@ object DonutRenderer {
             color = Color.WHITE
         }
 
-        // 上半分: 180度（左）から時計回りに
-        canvas.drawArc(bounds, 180f + gap / 2f, span, false, track)
-        val topSweep = (span * top).toFloat()
-        if (topSweep > 1f) canvas.drawArc(bounds, 180f + gap / 2f, topSweep, false, arc)
+        // 左半分: 6時から 9時を通って 12時へ
+        canvas.drawArc(bounds, bottom + gap / 2f, span, false, track)
+        val leftSweep = (span * left).toFloat()
+        if (leftSweep > 1f) canvas.drawArc(bounds, bottom + gap / 2f, leftSweep, false, arc)
 
-        // 下半分: 180度（左）から反時計回りに
-        canvas.drawArc(bounds, 180f - gap / 2f, -span, false, track)
-        if (bottom != null) {
-            val bottomSweep = (span * bottom).toFloat()
-            if (bottomSweep > 1f) {
-                canvas.drawArc(bounds, 180f - gap / 2f, -bottomSweep, false, arc)
+        // 右半分: 6時から 3時を通って 12時へ
+        canvas.drawArc(bounds, bottom - gap / 2f, -span, false, track)
+        if (right != null) {
+            val rightSweep = (span * right).toFloat()
+            if (rightSweep > 1f) {
+                canvas.drawArc(bounds, bottom - gap / 2f, -rightSweep, false, arc)
             }
         }
     }

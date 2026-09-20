@@ -98,3 +98,7 @@ curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8787/status
 | 4 | 即時通知 | 未着手 |
 | 5 | マシンチップ | hub 側は完了 |
 | 6 | Codex 対応 | 未着手 |
+
+## ライセンス
+
+MIT License. 詳細は [LICENSE](LICENSE) を参照。
