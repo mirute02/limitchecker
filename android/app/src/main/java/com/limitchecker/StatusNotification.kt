@@ -6,11 +6,8 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
-import android.graphics.Canvas
+import android.content.res.Configuration
 import android.graphics.Color
-import android.graphics.Paint
-import android.graphics.Typeface
 import android.graphics.drawable.Icon
 
 /**
@@ -19,21 +16,22 @@ import android.graphics.drawable.Icon
  * **前景サービスは使わない。** Android 15 以降、dataSync 型の前景サービスは
  * 24時間あたり6時間までに制限されるため、常設表示には使えない。
  * 常設通知（setOngoing）自体は前景サービスなしで出せるので、
- * ウィジェットと同じ [RefreshWorker] から更新する。
- * 追加の常駐プロセスは持たない（docs/decisions.md D16）。
+ * ウィジェットと同じ [RefreshWorker] から更新する（docs/decisions.md D16）。
  *
- * ステータスバー（時計や電池が並ぶ行）に出せるのは小さなアイコン1つだけで、
- * 任意の文字は置けない。そこで残量の数字を描いたアイコンを実行時に生成する。
- * OS が小アイコンを単色で塗るため、**色は使えない**。形（数字）だけが残る。
- * 色分けは通知を開いた先で見せる。
+ * 見せ方は3段階（D18）。
+ *   ステータスバー : ドーナツの形。単色に塗られるが濃淡は残るので読める
+ *   折りたたみ時   : リングの絵 + 残量の数字
+ *   展開時         : ウィジェットと同じ絵を大きく
  */
 object StatusNotification {
 
     private const val CHANNEL_ID = "limitchecker_status"
     private const val NOTIFICATION_ID = 1
 
-    /** ステータスバーのアイコンは小さい。この辺りが判読の下限。 */
-    private const val ICON_SIZE_PX = 96
+    private const val STATUS_ICON_PX = 96
+    private const val BADGE_PX = 192
+    private const val BIG_WIDTH_PX = 1024
+    private const val BIG_HEIGHT_PX = 448
 
     fun ensureChannel(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
@@ -61,7 +59,10 @@ object StatusNotification {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
         ensureChannel(context)
 
+        val night = (context.resources.configuration.uiMode and
+            Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
         val now = System.currentTimeMillis() / 1000
+
         val claude = (result as? HubClient.Result.Ok)?.status?.service("claude_code")
         val outer = claude?.ring("outer")
         val middle = claude?.ring("middle")
@@ -87,8 +88,16 @@ object StatusNotification {
             else -> ""
         }
 
-        val notification = Notification.Builder(context, CHANNEL_ID)
-            .setSmallIcon(smallIcon(context, if (usable) outer!!.remaining else null))
+        val statusIcon = Icon.createWithBitmap(
+            DonutRenderer.renderStatusBarIcon(
+                sizePx = STATUS_ICON_PX,
+                outerRemaining = if (usable) outer!!.remaining else null,
+                middleRemaining = if (usable) middle?.remaining else null,
+            )
+        )
+
+        val builder = Notification.Builder(context, CHANNEL_ID)
+            .setSmallIcon(statusIcon)
             .setContentTitle(title)
             .setContentText(body)
             .setContentIntent(openApp(context))
@@ -97,10 +106,34 @@ object StatusNotification {
             .setShowWhen(false)
             .setOnlyAlertOnce(true)
             .setCategory(Notification.CATEGORY_STATUS)
-            .build()
+            // アプリ名とアイコンに乗るアクセント色。逼迫時は朱色にして気づきやすくする
+            .setColor(accentColor(outer?.remaining, usable, night))
+
+        if (usable) {
+            // 折りたたみ時は右端にリングの絵。数字だけより状態が伝わる
+            builder.setLargeIcon(
+                DonutRenderer.renderBadge(BADGE_PX, outer, middle, night, dead = false)
+            )
+            // 展開するとウィジェットと同じ絵が大きく出る
+            builder.setStyle(
+                Notification.BigPictureStyle()
+                    .bigPicture(
+                        DonutRenderer.render(
+                            widthPx = BIG_WIDTH_PX,
+                            heightPx = BIG_HEIGHT_PX,
+                            result = result,
+                            nowEpoch = now,
+                            night = night,
+                            widthDp = 400,
+                        )
+                    )
+                    .setBigContentTitle(title)
+                    .setSummaryText(body)
+            )
+        }
 
         try {
-            manager.notify(NOTIFICATION_ID, notification)
+            manager.notify(NOTIFICATION_ID, builder.build())
         } catch (e: SecurityException) {
             // 通知の権限が外された。設定は残すが、次回の許可まで出せない。
         }
@@ -110,41 +143,19 @@ object StatusNotification {
         context.getSystemService(NotificationManager::class.java)?.cancel(NOTIFICATION_ID)
     }
 
+    /** ウィジェットの配色に合わせる。外側リングと同じ考え方（D12）。 */
+    private fun accentColor(remaining: Double?, usable: Boolean, night: Boolean): Int = when {
+        !usable || remaining == null -> if (night) Color.parseColor("#6E6A70") else Color.parseColor("#9E9A9F")
+        remaining < 0.20 -> if (night) Color.parseColor("#FF7043") else Color.parseColor("#D55E00")
+        else -> if (night) Color.parseColor("#56B4E9") else Color.parseColor("#0072B2")
+    }
+
     private fun openApp(context: Context): PendingIntent = PendingIntent.getActivity(
         context,
         0,
         Intent(context, SettingsActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
-
-    /**
-     * ステータスバー用のアイコンを実行時に描く。
-     *
-     * OS はアルファ値だけを使って単色で塗るため、白で描けばよい。
-     * 色を指定しても反映されない。
-     */
-    private fun smallIcon(context: Context, remaining: Double?): Icon {
-        val bitmap = Bitmap.createBitmap(ICON_SIZE_PX, ICON_SIZE_PX, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.WHITE
-            textAlign = Paint.Align.CENTER
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        }
-
-        if (remaining == null) {
-            // 取得できていないことを、数字ではなく形で示す
-            paint.textSize = ICON_SIZE_PX * 0.80f
-            canvas.drawText("?", ICON_SIZE_PX / 2f, ICON_SIZE_PX * 0.76f, paint)
-        } else {
-            val percent = Math.round(remaining * 100).coerceIn(0, 100)
-            // 3桁になると潰れるので、100 は "99" 扱いにして桁を揃える
-            val label = if (percent >= 100) "99" else percent.toString()
-            paint.textSize = ICON_SIZE_PX * 0.74f
-            canvas.drawText(label, ICON_SIZE_PX / 2f, ICON_SIZE_PX * 0.76f, paint)
-        }
-        return Icon.createWithBitmap(bitmap)
-    }
 
     private fun countdown(seconds: Long): String {
         if (seconds <= 0) return "まもなく"

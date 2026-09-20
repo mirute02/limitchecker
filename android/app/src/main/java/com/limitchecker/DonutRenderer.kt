@@ -261,6 +261,98 @@ object DonutRenderer {
         }
     }
 
+
+    // ------------------------------------------------------------------
+    // 通知向けの描画
+    // ------------------------------------------------------------------
+
+    /**
+     * ステータスバー（時計や電池が並ぶ行）用のアイコン。
+     *
+     * OS は小アイコンを**アルファ値だけを使って**単色で塗る。色は反映されないが、
+     * **半透明は半透明のまま残る**。そこで薄いトラックの上に濃い弧を重ねると、
+     * 単色でもドーナツとして読める。電池アイコンと同じ読み方ができる。
+     *
+     * 数字にすると 24dp では2桁で潰れるため、形で表す。
+     * 正確な値は通知を開けば出る。
+     */
+    fun renderStatusBarIcon(sizePx: Int, outerRemaining: Double?, middleRemaining: Double?): Bitmap {
+        val size = sizePx.coerceAtLeast(1)
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val center = size / 2f
+
+        if (outerRemaining == null) {
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.WHITE
+                textAlign = Paint.Align.CENTER
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                textSize = size * 0.80f
+            }
+            canvas.drawText("?", center, size * 0.76f, paint)
+            return bitmap
+        }
+
+        val stroke = size * 0.17f
+        val outerRadius = center - stroke / 2f - size * 0.04f
+        val middleRadius = outerRadius - stroke * 1.35f
+
+        drawIconRing(canvas, center, outerRadius, stroke, outerRemaining)
+        if (middleRemaining != null && middleRadius > stroke) {
+            drawIconRing(canvas, center, middleRadius, stroke, middleRemaining)
+        }
+        return bitmap
+    }
+
+    private fun drawIconRing(
+        canvas: Canvas, center: Float, radius: Float, stroke: Float, remaining: Double,
+    ) {
+        // トラックは薄く。OS の単色化でも濃淡は残る。
+        val track = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = stroke
+            color = Color.WHITE
+            alpha = 70
+        }
+        canvas.drawCircle(center, center, radius, track)
+
+        val arc = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = stroke
+            strokeCap = Paint.Cap.BUTT
+            color = Color.WHITE
+        }
+        val bounds = RectF(center - radius, center - radius, center + radius, center + radius)
+        val sweep = (remaining * 360.0).toFloat()
+        if (sweep > 1f) canvas.drawArc(bounds, -90f, sweep, false, arc)
+    }
+
+    /**
+     * 通知の右側に出すアイコン。背景は透明にして、リングだけを見せる。
+     * ウィジェットと同じ色使いなので、並べても違和感が出ない。
+     */
+    fun renderBadge(
+        sizePx: Int,
+        outer: Ring?,
+        middle: Ring?,
+        night: Boolean,
+        dead: Boolean,
+    ): Bitmap {
+        val size = sizePx.coerceAtLeast(1)
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val palette = Palette(night)
+        val center = size / 2f
+        val stroke = size * 0.13f
+        val gap = stroke * 0.5f
+        val outerRadius = center - stroke / 2f - size * 0.03f
+        val middleRadius = outerRadius - stroke - gap
+
+        drawRing(canvas, center, center, outerRadius, stroke, palette, outer, dead, 255)
+        drawRing(canvas, center, center, middleRadius, stroke, palette, middle, dead, 255)
+        return bitmap
+    }
+
     /** 1日未満は "H:MM"、それ以上は "N日"。 */
     private fun formatCountdown(seconds: Long): String {
         if (seconds <= 0) return "まもなく"
