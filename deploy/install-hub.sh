@@ -72,14 +72,21 @@ install_linux() {
     sed -e "s|__REPO__|$REPO|g" -e "s|__PYTHON__|$PYTHON|g" \
         "$SCRIPT_DIR/limitchecker-hub.service.in" > "$LINUX_UNIT"
     systemctl --user daemon-reload
-    systemctl --user enable --now limitchecker-hub
+    systemctl --user enable limitchecker-hub
+    # enable --now は「動いていなければ起動」でしかない。
+    # .env は起動時にしか読まないため、設定を変えて再実行したときに
+    # 反映されない。必ず restart する。
+    systemctl --user restart limitchecker-hub
     # ログアウト後も動かす。失敗しても致命的ではない
     loginctl enable-linger "$(id -un)" 2>/dev/null || \
         echo "  注意: enable-linger に失敗しました。ログアウトすると停止します。"
     echo "登録しました: $LINUX_UNIT"
 }
 
-status_linux() { systemctl --user status limitchecker-hub --no-pager || true; }
+status_linux() {
+    systemctl --user status limitchecker-hub --no-pager || true
+    show_listening
+}
 
 uninstall_linux() {
     systemctl --user disable --now limitchecker-hub 2>/dev/null || true
@@ -106,6 +113,47 @@ status_mac() {
         echo "稼働中です。"
     else
         echo "停止しています。"
+    fi
+    show_listening
+}
+
+# ------------------------------------------------------------------
+# 実際に何を待ち受けているかを見せる。
+# .env に書いた値と、実際に開いているポートがずれていることがあるため。
+# ------------------------------------------------------------------
+show_listening() {
+    bind=$(grep "^LIMITCHECKER_BIND=" "$REPO/.env" 2>/dev/null | cut -d= -f2- || true)
+    port=$(grep "^LIMITCHECKER_PORT=" "$REPO/.env" 2>/dev/null | cut -d= -f2- || true)
+    bind=${bind:-127.0.0.1}
+    port=${port:-8787}
+
+    echo
+    echo ".env の設定    : $bind:$port"
+
+    actual=""
+    if command -v ss >/dev/null 2>&1; then
+        actual=$(ss -ltnp 2>/dev/null | grep ":$port " || true)
+    elif command -v netstat >/dev/null 2>&1; then
+        actual=$(netstat -an 2>/dev/null | grep "LISTEN" | grep "\.$port \|:$port " || true)
+    fi
+
+    if [ -n "$actual" ]; then
+        echo "実際の待ち受け :"
+        printf '%s\n' "$actual" | sed 's/^/  /'
+    else
+        echo "実際の待ち受け : ポート $port で待ち受けているプロセスが見つかりません"
+    fi
+
+    echo
+    if [ "$bind" = "127.0.0.1" ] || [ "$bind" = "localhost" ]; then
+        echo "注意: 127.0.0.1 で待ち受けているため、**他の端末からは接続できません**。"
+        echo "      外から見るには .env の LIMITCHECKER_BIND を Tailscale の"
+        echo "      アドレスに変えて、もう一度 ./deploy/install-hub.sh を実行します。"
+    else
+        echo "この端末以外から繋ぐときは、アプリに入れる URL に注意してください。"
+        echo "  通る   : http://<マシン名>.<テイルネット名>.ts.net:$port"
+        echo "  通らない: http://$bind:$port  （IP は平文 HTTP の許可対象外）"
+        echo "MagicDNS 名は tailscale status で確認できます。"
     fi
 }
 
