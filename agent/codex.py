@@ -51,6 +51,7 @@ def load_env() -> dict:
         "LIMITCHECKER_MACHINE_ID",
         "LIMITCHECKER_MACHINE_LABEL",
         "LIMITCHECKER_CODEX_ACCOUNT",
+        "LIMITCHECKER_CODEX_BIN",
         "CODEX_BIN",
     ):
         if os.environ.get(key):
@@ -158,7 +159,9 @@ def extract_rings(result: dict) -> list:
 
 def main() -> int:
     env = load_env()
-    codex_bin = env.get("CODEX_BIN", "codex")
+    # Termux など、通信に回避策の要る環境ではラッパーを指すこと。
+    # alias はスクリプト内で展開されないため、ここで明示する必要がある。
+    codex_bin = env.get("LIMITCHECKER_CODEX_BIN") or env.get("CODEX_BIN") or "codex"
 
     result = fetch_rate_limits(codex_bin)
     if result is None:

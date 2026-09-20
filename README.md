@@ -98,6 +98,14 @@ Codex も表示するなら、定期実行を1つ足す。Claude Code と違っ�
 Codex App Server の `account/rateLimits/read` を使う。`~/.codex/auth.json` は読まない。
 認証は app-server が扱う。`thread/start` を行わないため Codex の枠は消費しない。
 
+**通信に回避策が要る環境（Termux など）では、`codex` のラッパーを `.env` で指定する。**
+`alias` はスクリプト内で展開されないため、指定しないと回避策を通らず
+`error sending request for url` で失敗する。
+
+```
+LIMITCHECKER_CODEX_BIN=/path/to/codex-wrapper
+```
+
 ### 3. Android アプリ
 
 APK は配布していないため、自分でビルドする。
@@ -154,9 +162,8 @@ git config core.hooksPath .githooks
   1時間を超えるとグレーになる
 - **モデル別の週次枠は取得できない**。statusLine が返すのは5時間枠と週次枠のみ
   （[確認結果](docs/findings-statusline.md)）
-- **Codex は Mac / Linux でのみ動作**。Termux では Codex App Server 側の取得が
-  失敗する（`error sending request for url`）。ネットワーク到達性の問題ではなく
-  環境固有のもの
+- **Codex は定期実行が要る**。Claude Code と違い statusLine のような
+  呼び出し口がないため、cron や systemd timer から叩く
 
 ## ドキュメント
 
