@@ -9,6 +9,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.Color
+import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
@@ -21,6 +22,10 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.RectF
+import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.RadioButton
@@ -448,15 +453,53 @@ class SettingsActivity : Activity() {
                 setTextIsSelectable(true)
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
 
-            addView(Button(this@SettingsActivity).apply {
-                text = getString(R.string.copy)
-                textSize = 12f
-                minWidth = dp(72)
-                minimumHeight = dp(40)
-                setPadding(dp(10), 0, dp(10), 0)
+            addView(ImageButton(this@SettingsActivity).apply {
+                setImageBitmap(copyGlyph())
+                background = null
+                // 目で見えるラベルがないので、読み上げ用に必ず付ける
+                contentDescription = getString(R.string.copy)
+                setPadding(dp(10), dp(8), dp(4), dp(8))
                 setOnClickListener { copyToClipboard(command) }
-            })
+            }, LinearLayout.LayoutParams(dp(44), dp(40)))
         }
+    }
+
+    /**
+     * コピーの図形を描く。重なった2枚の紙。
+     *
+     * 端末やテーマで有無が変わる標準アイコンに頼らず自前で描く。
+     * 文字と同じ色にするので、明暗どちらのテーマでも馴染む。
+     */
+    private fun copyGlyph(): Bitmap {
+        val size = dp(20)
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val stroke = size * 0.09f
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = stroke
+            color = if (isNight()) Color.parseColor("#E6E1E5") else Color.parseColor("#1C1B1F")
+        }
+        val radius = size * 0.14f
+        // 奥の紙（左上）
+        canvas.drawRoundRect(
+            RectF(size * 0.14f, size * 0.14f, size * 0.66f, size * 0.66f),
+            radius, radius, paint,
+        )
+        // 手前の紙（右下）。重なりが分かるよう、背景色で縁取ってから描く
+        val cut = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.FILL
+            color = if (isNight()) Color.parseColor("#2A282C") else Color.parseColor("#F1EFF3")
+        }
+        canvas.drawRoundRect(
+            RectF(size * 0.34f - stroke, size * 0.34f - stroke, size * 0.90f, size * 0.90f),
+            radius, radius, cut,
+        )
+        canvas.drawRoundRect(
+            RectF(size * 0.34f, size * 0.34f, size * 0.86f, size * 0.86f),
+            radius, radius, paint,
+        )
+        return bitmap
     }
 
     private fun copyToClipboard(text: String) {

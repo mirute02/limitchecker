@@ -323,13 +323,10 @@ object DonutRenderer {
 
         when (mode) {
             StatusIconMode.RINGS_BOTH -> {
-                val stroke = size * 0.17f
-                val outerRadius = center - stroke / 2f - size * 0.04f
-                val middleRadius = outerRadius - stroke * 1.35f
-                drawIconRing(canvas, center, outerRadius, stroke, outer!!.remaining)
-                if (middle != null && middleRadius > stroke) {
-                    drawIconRing(canvas, center, middleRadius, stroke, middle.remaining)
-                }
+                // 同心円を2本にすると 24dp では潰れて1本に見える。
+                // 円を上下に分け、それぞれ半周で表す。半周ぶんの太さを使えるので
+                // 小さくても両方読める。上が5時間枠、下が週次枠。
+                drawSplitRing(canvas, size, outer!!.remaining, middle?.remaining)
             }
             StatusIconMode.RING_5H, StatusIconMode.RING_WEEK -> {
                 // 1本だけなら太く描ける。形が読み取りやすくなる。
@@ -378,6 +375,50 @@ object DonutRenderer {
             remain >= 86_400 -> "${remain / 86_400}d"
             remain >= 3_600 -> "${remain / 3_600}h"
             else -> "${remain / 60}m"
+        }
+    }
+
+    /**
+     * 上半分と下半分に分けて2つの値を表す。
+     *
+     * 上（左から右へ時計回り）が5時間枠、下（左から右へ反時計回り）が週次枠。
+     * 両方満タンなら1つの円になる。左右の端に隙間を空けて、上下が別物だと分かるようにする。
+     */
+    private fun drawSplitRing(canvas: Canvas, size: Int, top: Double, bottom: Double?) {
+        val center = size / 2f
+        val stroke = size * 0.22f
+        val radius = center - stroke / 2f - size * 0.04f
+        val bounds = RectF(center - radius, center - radius, center + radius, center + radius)
+        // 左右に空ける隙間（度）。上下の境目をはっきりさせる。
+        val gap = 12f
+        val span = 180f - gap
+
+        val track = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = stroke
+            strokeCap = Paint.Cap.BUTT
+            color = Color.WHITE
+            alpha = 70
+        }
+        val arc = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = stroke
+            strokeCap = Paint.Cap.BUTT
+            color = Color.WHITE
+        }
+
+        // 上半分: 180度（左）から時計回りに
+        canvas.drawArc(bounds, 180f + gap / 2f, span, false, track)
+        val topSweep = (span * top).toFloat()
+        if (topSweep > 1f) canvas.drawArc(bounds, 180f + gap / 2f, topSweep, false, arc)
+
+        // 下半分: 180度（左）から反時計回りに
+        canvas.drawArc(bounds, 180f - gap / 2f, -span, false, track)
+        if (bottom != null) {
+            val bottomSweep = (span * bottom).toFloat()
+            if (bottomSweep > 1f) {
+                canvas.drawArc(bounds, 180f - gap / 2f, -bottomSweep, false, arc)
+            }
         }
     }
 

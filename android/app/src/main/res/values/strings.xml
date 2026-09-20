@@ -41,8 +41,8 @@
     <string name="notification_note">ステータスバーにはドーナツの形で出ます。OS が小アイコンを単色で塗るため色は出ませんが、濃淡は残るので残量が読めます。通知を開くとリングの絵と数字が出ます。音は鳴りません。</string>
     <string name="notification_denied">通知が許可されていません。端末の設定から許可してください。</string>
     <string name="status_icon_label">ステータスバーに出すもの</string>
-    <string name="status_icon_note">時計や電池が並ぶ行に置けるのは小さなアイコン1つだけです。どれを選んでも読める大きさを保つため、出せるのは1種類だけになります。詳しい値は通知を引き下ろせば見えます。</string>
-    <string name="mode_rings_both">ドーナツ（5時間＋週次）</string>
+    <string name="status_icon_note">時計や電池が並ぶ行に置けるのは小さなアイコン1つだけで、24dp ほどしかありません。2つの枠を出す場合は、同心円だと潰れるため円を上下に分けます。上半分が5時間枠、下半分が週次枠で、どちらも左端から伸びます。両方満タンなら1つの円になります。詳しい値は通知を引き下ろせば見えます。</string>
+    <string name="mode_rings_both">ドーナツ（上＝5時間／下＝週次）</string>
     <string name="mode_ring_5h">ドーナツ（5時間のみ）</string>
     <string name="mode_ring_week">ドーナツ（週次のみ）</string>
     <string name="mode_pct_5h">数字（5時間の残量）</string>
