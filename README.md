@@ -42,13 +42,28 @@ chmod 600 .env
 `LIMITCHECKER_BIND` は既定が `127.0.0.1`。外出先から見る場合のみ Tailscale の
 アドレスを書く。`0.0.0.0` は hub が起動を拒否する。
 
-### 2. hub を起動（1台に置く）
+### 2. hub を常駐させる（1台だけ）
+
+Linux でも macOS でも同じです。
+
+```sh
+./deploy/install-hub.sh
+```
+
+systemd と launchd の違いはスクリプトが吸収します。起動時に自動で立ち上がり、
+落ちたら再起動します。トークンが未設定ならその場で生成して表示します。
+
+```sh
+./deploy/install-hub.sh --status      # 状態を見る
+./deploy/install-hub.sh --uninstall   # 登録を外す
+```
+
+試すだけなら直接起動でも構いません。トークン未設定、16文字未満、
+`0.0.0.0` 指定のいずれでも起動しません。
 
 ```sh
 python3 hub/server.py
 ```
-
-トークン未設定、16文字未満、`0.0.0.0` 指定のいずれでも起動しない。
 
 ### 3. agent を仕込む（残量を取りたいマシンごと）
 

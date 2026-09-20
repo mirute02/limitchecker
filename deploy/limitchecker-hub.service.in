@@ -1,0 +1,28 @@
+# install-hub.sh が __REPO__ と __PYTHON__ を置換して
+# ~/.config/systemd/user/ に書き出す。手で置く必要はない。
+
+[Unit]
+Description=limitchecker hub
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=__REPO__
+ExecStart=__PYTHON__ __REPO__/hub/server.py
+Restart=on-failure
+RestartSec=5
+
+# 必要以上の権限を持たせない
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+# 書き込むのは自分の状態ディレクトリだけ
+ReadWritePaths=%h/.local/state/limitchecker
+
+[Install]
+WantedBy=default.target

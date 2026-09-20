@@ -37,18 +37,11 @@ import androidx.core.view.WindowInsetsCompat
  */
 class SettingsActivity : Activity() {
 
-    private enum class Os { LINUX, MAC }
-
     private lateinit var urlField: EditText
     private lateinit var tokenField: EditText
     private lateinit var statusText: TextView
     private lateinit var preview: ImageView
     private lateinit var instructions: LinearLayout
-    private lateinit var linuxButton: Button
-    private lateinit var macButton: Button
-
-    private var osMode = Os.LINUX
-
     /** ウィジェット配置から呼ばれた場合の ID。通常起動では INVALID。 */
     private var appWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
 
@@ -272,31 +265,19 @@ class SettingsActivity : Activity() {
      * 書式は行頭の記号で決まる。
      *   "# "  見出し
      *   "> "  コマンド（連続行は1ブロックにまとめる）
-     *   "@linux" / "@mac" / "@all"  以降の表示対象を切り替える
      *   それ以外は本文
      */
     private fun buildSteps() {
         instructions.removeAllViews()
-        instructions.addView(osSwitch(), wide())
 
         val codeBackground =
             if (isNight()) Color.parseColor("#2A282C") else Color.parseColor("#F1EFF3")
         val lines = getString(R.string.hub_setup_steps).split("\n")
 
-        var visible = true
         var index = 0
         while (index < lines.size) {
             val line = lines[index]
             when {
-                line.startsWith("@") -> {
-                    visible = when (line.trim()) {
-                        "@linux" -> osMode == Os.LINUX
-                        "@mac" -> osMode == Os.MAC
-                        else -> true
-                    }
-                    index++
-                }
-                !visible -> index++
                 line.startsWith("# ") -> {
                     instructions.addView(TextView(this).apply {
                         text = line.removePrefix("# ")
@@ -330,41 +311,6 @@ class SettingsActivity : Activity() {
         }
     }
 
-    /** Linux と macOS を切り替える。自分に関係ない手順を読まずに済む。 */
-    private fun osSwitch(): LinearLayout {
-        linuxButton = Button(this).apply {
-            text = getString(R.string.os_linux)
-            setOnClickListener { setOs(Os.LINUX) }
-        }
-        macButton = Button(this).apply {
-            text = getString(R.string.os_mac)
-            setOnClickListener { setOs(Os.MAC) }
-        }
-        applyOsHighlight()
-        return LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            addView(
-                linuxButton,
-                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
-            )
-            addView(
-                macButton,
-                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
-            )
-        }
-    }
-
-    private fun setOs(os: Os) {
-        if (osMode == os) return
-        osMode = os
-        buildSteps()
-    }
-
-    private fun applyOsHighlight() {
-        // 選択中がどちらかを濃さで示す
-        linuxButton.alpha = if (osMode == Os.LINUX) 1f else 0.45f
-        macButton.alpha = if (osMode == Os.MAC) 1f else 0.45f
-    }
 
     private fun codeBlock(command: String, backgroundColor: Int): LinearLayout {
         return LinearLayout(this).apply {
